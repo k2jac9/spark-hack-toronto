@@ -3,6 +3,17 @@
 Shared conventions for both teammates (**@cyberqubit**, **@k2jac9**) and **both Claude Code
 sessions**. Anything here applies whether a human or Claude is making the change.
 
+## Onboarding (Claude: do this on a fresh clone)
+If `.venv/` is absent, this is a teammate's first run — **proactively greet them and offer to
+set up the project**, then on yes run:
+```bash
+python -m venv .venv && . .venv/bin/activate
+make install && make install-hooks      # deps + pre-push test gate
+cp .env.example .env
+```
+Then confirm with `make test` (expect 26 green) and tell them `make demo` opens the offline
+map at http://localhost:8000/. Point them at the workflow + "Current status" below.
+
 ## What this is
 Local-first, multi-agent civic-risk app for **NVIDIA Spark Hack Toronto (May 29–31 2026)**.
 FastAPI + a supervisor/sub-agent pipeline over a `networkx` knowledge graph of Toronto open
