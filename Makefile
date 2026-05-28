@@ -1,4 +1,4 @@
-.PHONY: install data serve cli test demo demo-cli demo-data
+.PHONY: install install-hooks data serve cli test demo demo-cli demo-data
 
 # demo  -> real downtown-Toronto slice (demo_data/), pins land on the offline map.
 # demo-cli/tests -> synthetic, deterministic fixtures/.
@@ -7,6 +7,13 @@ FIXTURES ?= fixtures
 
 install:
 	pip install -r requirements.txt
+
+# Run once per clone (you AND your teammate). Enables the shared pre-push hook
+# that blocks pushing a red test suite. Bypass an emergency push with --no-verify.
+install-hooks:
+	chmod +x scripts/hooks/*
+	git config core.hooksPath scripts/hooks
+	@echo "Pre-push hook enabled (core.hooksPath=scripts/hooks)."
 
 data:
 	python scripts/download_data.py

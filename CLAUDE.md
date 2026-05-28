@@ -15,6 +15,8 @@ Layout: `src/civic_analyst/{ingest,graph,agents,api}`, `tests/`, `scripts/`, `de
 - `make demo-cli` — deterministic fixture check (100 Queen St W → 1.0)
 
 ## Collaboration (two people, two Claude sessions)
+- **First clone setup:** `make install` then **`make install-hooks`** (enables a pre-push
+  hook that blocks pushing a red test suite — run it once per clone, both teammates).
 - **main is gated by CI** — never push broken code to main.
 - Use a short-lived branch + PR: `git switch -c feat/<thing>` → push → `gh pr create` → merge **only when CI is green**.
 - **`git pull --rebase origin main`** before you start and before you push.

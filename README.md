@@ -37,6 +37,7 @@ City of Toronto Open Data (CKAN)
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+make install-hooks              # enable the pre-push test gate (run once per clone)
 cp .env.example .env            # point LLM_BASE_URL at your local Ollama/NIM endpoint
 
 python scripts/download_data.py # pre-fetch datasets (do this BEFORE the venue!)
