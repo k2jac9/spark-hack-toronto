@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..agents.digest import city_digest
@@ -45,6 +45,11 @@ app.mount("/static", StaticFiles(directory=_STATIC), name="static")
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
     return (_STATIC / "map.html").read_text()
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> FileResponse:
+    return FileResponse(_STATIC / "favicon.png", media_type="image/png")
 
 
 @app.get("/health")
