@@ -25,14 +25,17 @@ def test_real_slice_loads_in_bbox_with_some_risk():
 
 
 def test_real_cross_dataset_fusion():
-    """The slice must show genuine multi-dataset linking, not just one source."""
+    """The slice must show genuine multi-dataset linking across all three sources."""
     g = CivicGraph()
     summary = load_into_graph(g, SLICE)
     assert summary.get("licences", 0) > 0
-    fused = [
+    assert summary.get("permits", 0) > 0
+
+    triple = [
         a["label"]
         for a in g.addresses(with_coords=True)
         if g.records_for(a["label"], kind="inspection")
         and g.records_for(a["label"], kind="licence")
+        and g.records_for(a["label"], kind="permit")
     ]
-    assert fused, "expected ≥1 address linking both an inspection and a licence"
+    assert triple, "expected ≥1 address linking inspection + licence + permit"

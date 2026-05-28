@@ -1,9 +1,10 @@
 """Build small, committed REAL-data slices for the demo (demo_data/).
 
-Produces two slices that share addresses so the demo shows genuine cross-dataset
+Produces three slices that share addresses so the demo shows genuine cross-dataset
 fusion on the map:
   - dinesafe__downtown.csv  (food-safety inspections, drives risk + map pins/coords)
   - licences__downtown.csv  (business licences at the SAME addresses → linked records)
+  - permits__downtown.csv   (active building permits at the SAME addresses → also risk)
 
 Both are filtered to the downtown bbox that matches the offline PMTiles basemap,
 kept small for the repo, and preserve the real column schema. Re-run to refresh.
@@ -35,8 +36,14 @@ LICENCES_URL = (
     "57b2285f-4f80-45fb-ae3e-41a02c3a137f/resource/"
     "54bddc5e-92d9-4102-89c1-43e82f8f4d2d/download/business-licences-data.csv"
 )
+PERMITS_URL = (
+    "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/"
+    "108c2bd1-6945-46f6-af92-02f5658ee7f7/resource/"
+    "dfce3b7b-4f17-4a9d-9155-5e390a5ffa97/download/building-permits-active-permits.csv"
+)
 MAX_DINESAFE = 250
 MAX_LICENCES = 200
+MAX_PERMITS = 200
 
 
 def _ensure(path: Path, url: str) -> Path:
@@ -75,8 +82,23 @@ def build_licences(addr_keys: set[str]) -> None:
     print(f"licences: {len(keep)} rows linking to {keep['Licence Address Line 1'].nunique()} addresses")
 
 
+def build_permits(addr_keys: set[str]) -> None:
+    df = pd.read_csv(_ensure(RAW / "permits__real.csv", PERMITS_URL), dtype=str).fillna("")
+    composite = (
+        df["STREET_NUM"] + " " + df["STREET_NAME"] + " "
+        + df["STREET_TYPE"] + " " + df["STREET_DIRECTION"]
+    )
+    df["key"] = composite.map(normalize_address)
+    matched = df[df["key"].isin(addr_keys)]
+    n_addr = matched["key"].nunique()
+    matched.drop(columns=["key"]).head(MAX_PERMITS).to_csv(OUT / "permits__downtown.csv", index=False)
+    print(f"permits: {min(len(matched), MAX_PERMITS)} rows linking to {n_addr} addresses")
+
+
 def main() -> None:
-    build_licences(build_dinesafe())
+    keys = build_dinesafe()
+    build_licences(keys)
+    build_permits(keys)
 
 
 if __name__ == "__main__":
