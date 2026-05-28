@@ -72,6 +72,17 @@ The basemap is committed (`static/toronto.pmtiles`, ~6 MB). To refresh or widen 
 scripts/build_tiles.sh    # needs the `pmtiles` CLI; pulls only the bbox via range requests
 ```
 
+## Hallucination resistance
+The risk score and findings are computed **without an LLM** — the model only writes the
+narrative. Every generated narrative is then **verified against the findings**
+(`agents/verify.py`): any number it states must trace to the real counts, and any source
+it names must be an actual dataset. If a check fails, we discard the prose and show a
+**deterministic, correct-by-construction summary** instead — so a hallucinated number
+can never reach the user. (Example caught in testing: the model said "9 permits" when the
+data showed 8 → rejected and corrected.) Each `/analyze` response also returns the raw
+`evidence` records behind the claims, so judges can verify. Maps to the Prime Intellect
+"Verifiers" bounty.
+
 ## Two model tiers
 `LLM_MODEL` (Nemotron Nano) handles snappy interactive `/analyze`; `LLM_BATCH_MODEL`
 (gpt-oss-120B MoE) handles the heavier `/digest`. Both are MoE / small-active so they

@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass
 
 from ..graph.builder import CivicGraph
 from .subagents import ComplianceAgent, Finding, RetrievalAgent, RiskNarratorAgent
+from .verify import evidence_records
 
 
 @dataclass
@@ -18,6 +19,7 @@ class RiskReport:
     risk_score: float          # 0..1
     narrative: str
     findings: list[dict]
+    evidence: list[dict]       # the real records behind the claims ("show your work")
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -52,4 +54,5 @@ class Supervisor:
                 {"agent": f.agent, "summary": f.summary, "score": f.score}
                 for f in findings
             ],
+            evidence=evidence_records(findings),
         )

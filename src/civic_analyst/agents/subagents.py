@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from ..graph.builder import CivicGraph
 from ..ingest.datasets import REGISTRY
 from .llm import LocalLLM, interactive_llm
+from .verify import deterministic_summary, verify_narrative
 
 
 @dataclass
@@ -66,8 +67,10 @@ class RiskNarratorAgent:
         "You are a municipal risk analyst. Using ONLY the datasets named in the "
         "Evidence below, write a 3-sentence risk assessment and one concrete "
         "recommended action for an inspector. Cite the exact dataset name from the "
-        "Evidence behind each claim. Never invent dataset names, records, or numbers "
-        "that are not present in the Evidence."
+        "Evidence behind each claim. Use only numbers that appear in the Evidence or "
+        "Findings; if a figure is not given, do not state one. Never invent dataset "
+        "names, records, or statistics. End with a line: 'Sources: <comma-separated "
+        "dataset names from the Evidence>'."
     )
 
     def __init__(self, llm: LocalLLM | None = None) -> None:
@@ -107,6 +110,11 @@ class RiskNarratorAgent:
             f"Findings:\n{bullets}"
         )
         try:
-            return self.llm.chat(self.SYSTEM, user)
-        except Exception as exc:  # offline / no model: deterministic fallback
-            return f"(LLM unavailable: {exc})\nDatasets: {consulted}\nFindings:\n{bullets}"
+            text = self.llm.chat(self.SYSTEM, user, temperature=0.0)
+        except Exception:  # offline / no model
+            return deterministic_summary(address, findings)
+        # Trust but verify: a narrative that cites unknown sources or invents numbers
+        # is discarded in favor of the correct-by-construction summary.
+        if verify_narrative(text, address, findings):
+            return deterministic_summary(address, findings)
+        return text

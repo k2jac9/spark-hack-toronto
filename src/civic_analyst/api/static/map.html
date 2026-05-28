@@ -62,12 +62,17 @@
       const detail = document.getElementById('detail');
       detail.innerHTML = '<p class="hint">Analyzing ' + address + '…</p>';
       const d = await (await fetch('/analyze?address=' + encodeURIComponent(address))).json();
+      const evidence = (d.evidence || [])
+        .map(e => '<li>[' + e.dataset + '] ' + e.kind + (e.detail ? ' — ' + e.detail : '') + '</li>')
+        .join('');
       detail.innerHTML =
         '<div id="score" style="color:' + color(d.risk_score) + '">' + d.risk_score + '</div>' +
         '<div class="hint">' + d.address + '</div>' +
         '<ul id="findings">' +
         d.findings.map(f => '<li><b>' + f.agent + '</b>: ' + f.summary + '</li>').join('') +
-        '</ul><div id="narrative">' + d.narrative + '</div>';
+        '</ul><div id="narrative">' + d.narrative + '</div>' +
+        '<div class="hint" style="margin-top:10px">Evidence (verifiable source records):</div>' +
+        '<ul id="findings">' + evidence + '</ul>';
     }
 
     map.on('load', async () => {
