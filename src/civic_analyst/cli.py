@@ -7,6 +7,7 @@ import sys
 
 from .agents.supervisor import Supervisor
 from .graph.builder import CivicGraph
+from .ingest.loader import load_into_graph
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -14,11 +15,20 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     a = sub.add_parser("analyze", help="risk read for an address")
     a.add_argument("address")
+    a.add_argument(
+        "--no-load",
+        action="store_true",
+        help="skip loading pre-downloaded data (empty graph)",
+    )
 
     args = parser.parse_args(argv)
 
     if args.command == "analyze":
-        graph = CivicGraph()  # TODO: load pre-downloaded data here
+        graph = CivicGraph()
+        if not args.no_load:
+            summary = load_into_graph(graph)
+            if summary:
+                print(f"loaded: {summary}", file=sys.stderr)
         report = Supervisor(graph).analyze(args.address)
         print(json.dumps(report.to_dict(), indent=2))
         return 0
