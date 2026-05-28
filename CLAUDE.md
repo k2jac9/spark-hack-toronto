@@ -46,6 +46,14 @@ Layout: `src/civic_analyst/{ingest,graph,agents,api}`, `tests/`, `scripts/`, `de
 - **STRETCH (only if core is solid):** QLoRA fine-tune, multi-dataset fusion, NemoClaw on the box.
 - Don't overscope. **One flawless demo > five half-features.**
 
+## Current status (handoff — 2026-05-28)
+The **core demo is done and verified on real data**; a fresh clone builds + passes all tests.
+- First-clone setup: `python -m venv .venv && . .venv/bin/activate` → `make install` → `make install-hooks` → `cp .env.example .env`. Then `make demo` (offline map at :8000) or `make test`.
+- **Done:** offline MapLibre+PMTiles map; 3 real Toronto datasets fused (DineSafe + licences + permits, ~12 addresses link all three); deterministic risk scoring; local-LLM narrator with a **hallucination guard** (verifier + deterministic fallback) and **per-claim click-to-verify** (browser-confirmed); CI + pre-push test gate.
+- **Left (GX10-day, can't be done off the box):** run real Nemotron (`LLM_MODEL=nemotron-3-nano` against local Ollama); optional NemoClaw wiring (`config/nemoclaw.mcp.json`); optional QLoRA fine-tune (`scripts/finetune_address_resolution.py`).
+- **Demo tip:** use **500 Bloor St W** as the hero pin — it shows the 3-dataset fusion best (permits + failed inspections + licence). Avoid 40 Bay St (permit-only saturates the evidence view).
+- Real-data slices are committed; regenerate with `make demo-data` (needs the `pmtiles` CLI for the basemap via `scripts/build_tiles.sh`).
+
 ---
 
 # Ruflo — Claude Code Configuration
