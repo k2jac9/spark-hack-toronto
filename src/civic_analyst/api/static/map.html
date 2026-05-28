@@ -4,15 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Toronto Civic Risk Analyst</title>
-  <link rel="stylesheet" href="/static/vendor/leaflet.css" />
+  <link rel="stylesheet" href="/static/vendor/maplibre-gl.css" />
   <style>
     body { margin: 0; font-family: system-ui, sans-serif; }
-    /* Dark background so risk pins stay readable even if map tiles fail to load. */
-    #map { height: 100vh; width: 70vw; float: left; background: #1e293b; }
-    #offline { position: absolute; top: 8px; left: 8px; z-index: 1000; display: none;
-               background: #f59e0b; color: #1e293b; padding: 4px 10px; border-radius: 6px;
-               font-size: 12px; font-weight: 600; }
-    #panel { height: 100vh; width: 30vw; float: right; overflow-y: auto;
+    /* Fully offline: vector basemap from a self-hosted PMTiles file (no tile servers). */
+    #map { position: absolute; top: 0; bottom: 0; left: 0; width: 70vw; background: #0b1220; }
+    #panel { position: absolute; top: 0; bottom: 0; right: 0; width: 30vw; overflow-y: auto;
              box-sizing: border-box; padding: 16px; background: #0f172a; color: #e2e8f0; }
     #panel h1 { font-size: 18px; margin: 0 0 4px; }
     #panel .hint { color: #94a3b8; font-size: 13px; }
@@ -23,50 +20,86 @@
   </style>
 </head>
 <body>
-  <div id="map"><div id="offline">Map tiles offline — showing risk data only</div></div>
+  <div id="map"></div>
   <div id="panel">
     <h1>Toronto Civic Risk Analyst</h1>
-    <div class="hint">100% on-device · click a pin for the agentic risk read</div>
+    <div class="hint">100% on-device · offline vector map · click a pin for the agentic read</div>
     <div id="detail"><p class="hint">Loading addresses…</p></div>
   </div>
-  <script src="/static/vendor/leaflet.js"></script>
+  <script src="/static/vendor/maplibre-gl.js"></script>
+  <script src="/static/vendor/pmtiles.js"></script>
   <script>
-    const map = L.map('map').setView([43.6510, -79.3845], 14);
-    const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-    // If tiles can't load (flaky venue WiFi), reveal a banner once — pins still render.
-    tiles.once('tileerror', () => { document.getElementById('offline').style.display = 'block'; });
-
+    // Register the pmtiles:// protocol so MapLibre reads our self-hosted vector file.
+    const protocol = new pmtiles.Protocol();
+    maplibregl.addProtocol('pmtiles', protocol.tile);
+    const PMTILES = `pmtiles://${location.origin}/static/toronto.pmtiles`;
     const color = (r) => r >= 0.67 ? '#ef4444' : r >= 0.34 ? '#f59e0b' : '#22c55e';
+
+    // Label-less dark basemap → no font glyphs/sprites needed, so it works fully offline.
+    const map = new maplibregl.Map({
+      container: 'map',
+      center: [-79.3845, 43.6510],
+      zoom: 13.4,
+      attributionControl: { compact: true },
+      style: {
+        version: 8,
+        sources: { proto: { type: 'vector', url: PMTILES, attribution: '© OpenStreetMap' } },
+        layers: [
+          { id: 'bg', type: 'background', paint: { 'background-color': '#0b1220' } },
+          { id: 'earth', source: 'proto', 'source-layer': 'earth', type: 'fill', paint: { 'fill-color': '#172033' } },
+          { id: 'landcover', source: 'proto', 'source-layer': 'landcover', type: 'fill', paint: { 'fill-color': '#15301f', 'fill-opacity': 0.4 } },
+          { id: 'landuse', source: 'proto', 'source-layer': 'landuse', type: 'fill', paint: { 'fill-color': '#15301f', 'fill-opacity': 0.7 } },
+          { id: 'water', source: 'proto', 'source-layer': 'water', type: 'fill', paint: { 'fill-color': '#0e2a4a' } },
+          { id: 'roads', source: 'proto', 'source-layer': 'roads', type: 'line',
+            paint: { 'line-color': '#3a4a66', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.4, 14, 1.5, 16, 4] } },
+          { id: 'buildings', source: 'proto', 'source-layer': 'buildings', type: 'fill', minzoom: 13.5, paint: { 'fill-color': '#212d44' } }
+        ]
+      }
+    });
+    map.addControl(new maplibregl.NavigationControl());
 
     async function analyze(address) {
       const detail = document.getElementById('detail');
       detail.innerHTML = '<p class="hint">Analyzing ' + address + '…</p>';
-      const r = await fetch('/analyze?address=' + encodeURIComponent(address));
-      const d = await r.json();
+      const d = await (await fetch('/analyze?address=' + encodeURIComponent(address))).json();
       detail.innerHTML =
-        '<div id="score" style="color:' + color(d.risk_score) + '">' +
-        d.risk_score + '</div><div class="hint">' + d.address + '</div>' +
+        '<div id="score" style="color:' + color(d.risk_score) + '">' + d.risk_score + '</div>' +
+        '<div class="hint">' + d.address + '</div>' +
         '<ul id="findings">' +
         d.findings.map(f => '<li><b>' + f.agent + '</b>: ' + f.summary + '</li>').join('') +
         '</ul><div id="narrative">' + d.narrative + '</div>';
     }
 
-    fetch('/addresses').then(r => r.json()).then(rows => {
+    map.on('load', async () => {
+      const rows = await (await fetch('/addresses')).json();
+      const detail = document.getElementById('detail');
       if (!rows.length) {
-        document.getElementById('detail').innerHTML =
-          '<p class="hint">No geocoded addresses loaded. Run <code>make demo</code> or download data.</p>';
+        detail.innerHTML = '<p class="hint">No geocoded addresses loaded. Run <code>make demo</code>.</p>';
         return;
       }
-      document.getElementById('detail').innerHTML =
-        '<p class="hint">' + rows.length + ' addresses. Click a pin.</p>';
-      rows.forEach(a => {
-        L.circleMarker([a.lat, a.lng], {
-          radius: 10, color: color(a.risk_score), fillColor: color(a.risk_score),
-          fillOpacity: 0.8
-        }).addTo(map).on('click', () => analyze(a.label))
-          .bindTooltip(a.label + ' · ' + a.risk_score);
+      detail.innerHTML = '<p class="hint">' + rows.length + ' addresses. Click a pin.</p>';
+      map.addSource('risk', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: rows.map(a => ({
+            type: 'Feature',
+            properties: { label: a.label, risk: a.risk_score },
+            geometry: { type: 'Point', coordinates: [a.lng, a.lat] }
+          }))
+        }
       });
+      map.addLayer({
+        id: 'risk-pins', source: 'risk', type: 'circle',
+        paint: {
+          'circle-radius': 9,
+          'circle-color': ['step', ['get', 'risk'], '#22c55e', 0.34, '#f59e0b', 0.67, '#ef4444'],
+          'circle-stroke-width': 2, 'circle-stroke-color': '#0b1220'
+        }
+      });
+      map.on('click', 'risk-pins', (e) => analyze(e.features[0].properties.label));
+      map.on('mouseenter', 'risk-pins', () => map.getCanvas().style.cursor = 'pointer');
+      map.on('mouseleave', 'risk-pins', () => map.getCanvas().style.cursor = '');
     });
   </script>
 </body>

@@ -52,12 +52,19 @@ fetching any real data:
 make demo        # serves the API + map against fixtures/
 make demo-cli    # prints a populated report and exits
 ```
-Then open **http://localhost:8000/** — a Leaflet map with pins colored by risk
-(red = high). Click a pin to run the agentic read. Endpoints:
+Then open **http://localhost:8000/** — a **fully offline** map (MapLibre GL rendering
+a self-hosted PMTiles vector basemap of downtown Toronto, `static/toronto.pmtiles`)
+with pins colored by risk (red = high). No tile servers, no CDN — demo-proof against
+flaky venue WiFi. Click a pin to run the agentic read. Endpoints:
 - `GET /`           map UI
 - `GET /addresses`  geocoded addresses + fast risk score (no LLM) — drives the pins
 - `GET /analyze?address=…`  full agentic read (Nemotron Nano, interactive tier)
 - `GET /digest`     city-wide briefing (gpt-oss-120B MoE, batch tier)
+
+The basemap is committed (`static/toronto.pmtiles`, ~6 MB). To refresh or widen it:
+```bash
+scripts/build_tiles.sh    # needs the `pmtiles` CLI; pulls only the bbox via range requests
+```
 
 ## Two model tiers
 `LLM_MODEL` (Nemotron Nano) handles snappy interactive `/analyze`; `LLM_BATCH_MODEL`

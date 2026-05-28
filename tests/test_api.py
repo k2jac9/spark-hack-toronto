@@ -34,13 +34,19 @@ def test_endpoints_with_fixtures():
         analyze = client.get("/analyze", params={"address": "100 Queen St W"}).json()
         assert analyze["risk_score"] == 1.0
 
-        # Map page serves and uses vendored (offline-safe) Leaflet, not a CDN.
+        # Map page serves and uses vendored, offline MapLibre + PMTiles (no CDN).
         page = client.get("/").text
         assert "Toronto Civic Risk Analyst" in page
-        assert "/static/vendor/leaflet.js" in page
+        assert "/static/vendor/maplibre-gl.js" in page
+        assert "/static/vendor/pmtiles.js" in page
+        assert "/static/toronto.pmtiles" in page
         assert "unpkg.com" not in page
-        assert client.get("/static/vendor/leaflet.js").status_code == 200
-        assert client.get("/static/vendor/leaflet.css").status_code == 200
+        assert client.get("/static/vendor/maplibre-gl.js").status_code == 200
+        assert client.get("/static/vendor/pmtiles.js").status_code == 200
+        # The PMTiles file must serve with HTTP range support (pmtiles.js needs it).
+        ranged = client.get("/static/toronto.pmtiles", headers={"Range": "bytes=0-15"})
+        assert ranged.status_code == 206
+        assert len(ranged.content) == 16
 
 
 def test_digest_ranks_hottest_first():
