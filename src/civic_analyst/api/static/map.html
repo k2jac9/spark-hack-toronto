@@ -4,10 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Toronto Civic Risk Analyst</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/static/vendor/leaflet.css" />
   <style>
     body { margin: 0; font-family: system-ui, sans-serif; }
-    #map { height: 100vh; width: 70vw; float: left; }
+    /* Dark background so risk pins stay readable even if map tiles fail to load. */
+    #map { height: 100vh; width: 70vw; float: left; background: #1e293b; }
+    #offline { position: absolute; top: 8px; left: 8px; z-index: 1000; display: none;
+               background: #f59e0b; color: #1e293b; padding: 4px 10px; border-radius: 6px;
+               font-size: 12px; font-weight: 600; }
     #panel { height: 100vh; width: 30vw; float: right; overflow-y: auto;
              box-sizing: border-box; padding: 16px; background: #0f172a; color: #e2e8f0; }
     #panel h1 { font-size: 18px; margin: 0 0 4px; }
@@ -19,17 +23,19 @@
   </style>
 </head>
 <body>
-  <div id="map"></div>
+  <div id="map"><div id="offline">Map tiles offline — showing risk data only</div></div>
   <div id="panel">
     <h1>Toronto Civic Risk Analyst</h1>
     <div class="hint">100% on-device · click a pin for the agentic risk read</div>
     <div id="detail"><p class="hint">Loading addresses…</p></div>
   </div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/static/vendor/leaflet.js"></script>
   <script>
     const map = L.map('map').setView([43.6510, -79.3845], 14);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
       { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+    // If tiles can't load (flaky venue WiFi), reveal a banner once — pins still render.
+    tiles.once('tileerror', () => { document.getElementById('offline').style.display = 'block'; });
 
     const color = (r) => r >= 0.67 ? '#ef4444' : r >= 0.34 ? '#f59e0b' : '#22c55e';
 

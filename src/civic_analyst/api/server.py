@@ -17,6 +17,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from ..agents.digest import city_digest
 from ..agents.supervisor import Supervisor
@@ -36,6 +37,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Toronto Civic Risk Analyst", version="0.1.0", lifespan=lifespan)
+
+# Vendored Leaflet (offline-safe) lives under static/vendor.
+app.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)

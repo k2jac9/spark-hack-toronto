@@ -34,8 +34,13 @@ def test_endpoints_with_fixtures():
         analyze = client.get("/analyze", params={"address": "100 Queen St W"}).json()
         assert analyze["risk_score"] == 1.0
 
-        # Map page serves.
-        assert "Toronto Civic Risk Analyst" in client.get("/").text
+        # Map page serves and uses vendored (offline-safe) Leaflet, not a CDN.
+        page = client.get("/").text
+        assert "Toronto Civic Risk Analyst" in page
+        assert "/static/vendor/leaflet.js" in page
+        assert "unpkg.com" not in page
+        assert client.get("/static/vendor/leaflet.js").status_code == 200
+        assert client.get("/static/vendor/leaflet.css").status_code == 200
 
 
 def test_digest_ranks_hottest_first():
