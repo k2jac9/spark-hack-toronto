@@ -45,12 +45,14 @@ make serve                      # FastAPI on :8000  → GET /analyze?address=...
 python -m civic_analyst.cli analyze "100 Queen St W"
 ```
 
-## Instant demo (no downloads)
-Synthetic fixtures live in `fixtures/`, so you can show a populated demo without
-fetching any real data:
+## Instant demo
+`make demo` serves the offline map against a **committed slice of real downtown
+Toronto DineSafe data** (`demo_data/`, filtered to the basemap's bbox so every pin
+lands on the map). `make demo-cli` runs a deterministic check on synthetic fixtures.
 ```bash
-make demo        # serves the API + map against fixtures/
-make demo-cli    # prints a populated report and exits
+make demo        # offline map + real downtown establishments at http://localhost:8000/
+make demo-cli    # deterministic report on synthetic fixtures (100 Queen St W → 1.0)
+make demo-data   # rebuild the real slice from the live dataset
 ```
 Then open **http://localhost:8000/** — a **fully offline** map (MapLibre GL rendering
 a self-hosted PMTiles vector basemap of downtown Toronto, `static/toronto.pmtiles`)

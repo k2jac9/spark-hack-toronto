@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..graph.builder import CivicGraph
+from ..ingest.datasets import REGISTRY
 from .llm import LocalLLM, interactive_llm
 
 
@@ -62,18 +63,50 @@ class RiskNarratorAgent:
 
     name = "risk_narrator"
     SYSTEM = (
-        "You are a municipal risk analyst. Given structured findings about a Toronto "
-        "address, write a 3-sentence risk assessment and one concrete recommended action. "
-        "Cite the dataset behind each claim. Be precise; do not invent records."
+        "You are a municipal risk analyst. Using ONLY the datasets named in the "
+        "Evidence below, write a 3-sentence risk assessment and one concrete "
+        "recommended action for an inspector. Cite the exact dataset name from the "
+        "Evidence behind each claim. Never invent dataset names, records, or numbers "
+        "that are not present in the Evidence."
     )
 
     def __init__(self, llm: LocalLLM | None = None) -> None:
         self.llm = llm or interactive_llm()
 
+    def _grounding(self, findings: list[Finding]) -> tuple[str, str]:
+        """Build (datasets-consulted, evidence-lines) from the actual records."""
+        seen: set = set()
+        names: list[str] = []
+        lines: list[str] = []
+        for f in findings:
+            for rec in f.evidence:
+                rid = rec.get("id")
+                if rid in seen:
+                    continue
+                seen.add(rid)
+                key = rec.get("dataset")
+                name = REGISTRY[key].title if key in REGISTRY else (key or "unknown")
+                if name not in names:
+                    names.append(name)
+                state = rec.get("outcome") or rec.get("status") or ""
+                kind = rec.get("kind", "record")
+                lines.append(f"- [{name}] {kind}{f': {state}' if state else ''}")
+                if len(lines) >= 12:
+                    break
+            if len(lines) >= 12:
+                break
+        return ", ".join(names) or "none", "\n".join(lines) or "(no records)"
+
     def run(self, address: str, findings: list[Finding]) -> str:
         bullets = "\n".join(f"- [{f.agent}] {f.summary}" for f in findings)
-        user = f"Address: {address}\nFindings:\n{bullets}"
+        consulted, evidence = self._grounding(findings)
+        user = (
+            f"Address: {address}\n"
+            f"Datasets consulted: {consulted}\n"
+            f"Evidence (cite ONLY these datasets):\n{evidence}\n"
+            f"Findings:\n{bullets}"
+        )
         try:
             return self.llm.chat(self.SYSTEM, user)
         except Exception as exc:  # offline / no model: deterministic fallback
-            return f"(LLM unavailable: {exc})\nFindings:\n{bullets}"
+            return f"(LLM unavailable: {exc})\nDatasets: {consulted}\nFindings:\n{bullets}"
