@@ -1,0 +1,5 @@
+PERMIT_NUM,STREET_NUM,STREET_NAME,STREET_TYPE,STATUS,WORK
+P1,100,QUEEN,ST W,open,Interior alterations
+P2,100,QUEEN,ST W,open,Plumbing
+P3,55,JOHN,ST,Closed,New rear deck
+P4,200,BAY,ST,open,Mechanical HVAC

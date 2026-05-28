@@ -43,6 +43,14 @@ make serve                      # FastAPI on :8000  → GET /analyze?address=...
 python -m civic_analyst.cli analyze "100 Queen St W"
 ```
 
+## Instant demo (no downloads)
+Synthetic fixtures live in `fixtures/`, so you can show a populated `/analyze`
+without fetching any real data:
+```bash
+make demo        # serves the API against fixtures/ → curl /analyze?address=100 Queen St W (risk 1.0)
+make demo-cli    # prints a populated report and exits
+```
+
 ## Local model (on the GX10)
 The GX10 ships with Ollama + DGX OS (ARM64). Pull a small-active model and serve its
 OpenAI-compatible endpoint:

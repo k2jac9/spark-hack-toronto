@@ -1,0 +1,5 @@
+_id,Establishment Name,Establishment Address,STATUS,Severity
+1,Joe's Diner,100 Queen St W,Fail,Crucial
+2,Joe's Diner,100 Queen St W,Fail,Significant
+3,Bay Bistro,200 Bay St,Pass,Minor
+4,John St Cafe,55 John St,Pass,Minor
