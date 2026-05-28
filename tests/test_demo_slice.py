@@ -22,3 +22,17 @@ def test_real_slice_loads_in_bbox_with_some_risk():
     # At least one at-risk address so the map shows a non-green pin.
     sup = Supervisor(g)
     assert any(sup.score_only(a["label"]) > 0 for a in addrs)
+
+
+def test_real_cross_dataset_fusion():
+    """The slice must show genuine multi-dataset linking, not just one source."""
+    g = CivicGraph()
+    summary = load_into_graph(g, SLICE)
+    assert summary.get("licences", 0) > 0
+    fused = [
+        a["label"]
+        for a in g.addresses(with_coords=True)
+        if g.records_for(a["label"], kind="inspection")
+        and g.records_for(a["label"], kind="licence")
+    ]
+    assert fused, "expected ≥1 address linking both an inspection and a licence"

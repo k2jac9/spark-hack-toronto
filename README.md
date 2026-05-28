@@ -47,9 +47,11 @@ python -m civic_analyst.cli analyze "100 Queen St W"
 ```
 
 ## Instant demo
-`make demo` serves the offline map against a **committed slice of real downtown
-Toronto DineSafe data** (`demo_data/`, filtered to the basemap's bbox so every pin
-lands on the map). `make demo-cli` runs a deterministic check on synthetic fixtures.
+`make demo` serves the offline map against **committed slices of real downtown
+Toronto data** (`demo_data/`) — DineSafe inspections **and** business licences that
+share addresses, so ~19 establishments link both sources on one pin (real
+cross-dataset fusion, not staged). Filtered to the basemap's bbox so every pin lands
+on the map. `make demo-cli` runs a deterministic check on synthetic fixtures.
 ```bash
 make demo        # offline map + real downtown establishments at http://localhost:8000/
 make demo-cli    # deterministic report on synthetic fixtures (100 Queen St W → 1.0)
