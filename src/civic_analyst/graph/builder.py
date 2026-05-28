@@ -12,14 +12,23 @@ import networkx as nx
 
 
 def normalize_address(raw: str) -> str:
-    """Cheap address key. The real entity-resolution (fuzzy matching across
-    messy municipal address formats) is the local-LLM job — see agents/subagents."""
+    """Cheap address key. Deterministic cleanup of the real-world quirks seen in
+    Toronto open data (embedded 'None' for missing units, trailing postal codes,
+    city/province suffixes). The harder fuzzy entity-resolution is the local-LLM
+    job — see agents/subagents."""
     s = raw.upper().strip()
     s = re.sub(r"[.,]", " ", s)
+    # Drop Canadian postal codes (e.g. "M4A 1X1") and literal 'NONE' unit placeholders.
+    s = re.sub(r"\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b", " ", s)
+    s = re.sub(r"\bNONE\b", " ", s)
+    s = re.sub(r"\b(TORONTO|ONTARIO|ON|CANADA)\b", " ", s)
     s = re.sub(r"\bSTREET\b", "ST", s)
     s = re.sub(r"\bAVENUE\b", "AVE", s)
+    s = re.sub(r"\bBOULEVARD\b", "BLVD", s)
     s = re.sub(r"\bWEST\b", "W", s)
     s = re.sub(r"\bEAST\b", "E", s)
+    s = re.sub(r"\bNORTH\b", "N", s)
+    s = re.sub(r"\bSOUTH\b", "S", s)
     return re.sub(r"\s+", " ", s).strip()
 
 
