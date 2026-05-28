@@ -1,3 +1,51 @@
+# Toronto Civic Risk Analyst — Team Workflow (read first)
+
+Shared conventions for both teammates (**@cyberqubit**, **@k2jac9**) and **both Claude Code
+sessions**. Anything here applies whether a human or Claude is making the change.
+
+## What this is
+Local-first, multi-agent civic-risk app for **NVIDIA Spark Hack Toronto (May 29–31 2026)**.
+FastAPI + a supervisor/sub-agent pipeline over a `networkx` knowledge graph of Toronto open
+data, a local Nemotron model (OpenAI-compatible endpoint), MapLibre + offline PMTiles map.
+Layout: `src/civic_analyst/{ingest,graph,agents,api}`, `tests/`, `scripts/`, `demo_data/`.
+
+## Golden commands (run before every push)
+- `make test`   — `PYTHONPATH=src pytest`; **must be green** (CI enforces it on main)
+- `make demo`   — offline map + real downtown data at http://localhost:8000/
+- `make demo-cli` — deterministic fixture check (100 Queen St W → 1.0)
+
+## Collaboration (two people, two Claude sessions)
+- **main is gated by CI** — never push broken code to main.
+- Use a short-lived branch + PR: `git switch -c feat/<thing>` → push → `gh pr create` → merge **only when CI is green**.
+- **`git pull --rebase origin main`** before you start and before you push.
+- Small, frequent, clearly-messaged commits. **Never force-push main.**
+- Rough ownership to avoid collisions (flex as needed, just announce it):
+  **@cyberqubit → ingest / graph / data**, **@k2jac9 → agents / api / UI**.
+
+## Repo hygiene
+- **NEVER commit:** secrets / `.env`, `data/raw/` (raw datasets), `.claude/`, `.venv/`, `node_modules/`.
+- **DO commit (intentional, makes the demo work offline):** `demo_data/` (small real slice),
+  `src/.../static/toronto.pmtiles` (offline basemap), `src/.../static/vendor/` (MapLibre + pmtiles JS).
+- Files < 500 lines; validate input at boundaries; **no `Co-Authored-By` trailer**.
+
+## Local model
+- Any OpenAI-compatible endpoint. Dev: Ollama (`LLM_MODEL=llama3.2:3b`).
+- On the GX10: `LLM_MODEL=nemotron-3-nano` (interactive) + `LLM_BATCH_MODEL=gpt-oss:120b` (batch).
+- Code is offline-safe: no model → deterministic fallback. **Don't "fix" the fallback.**
+
+## Don't regress these (GX10 + demo invariants)
+- **ARM64 only** — build aarch64 images, pre-pull ARM wheels/containers.
+- **MoE / small-active models only** (128GB but ~273 GB/s; dense 70B ≈ 2.7 tok/s).
+- **Map stays 100% offline** — no CDN, no tile servers (vendored assets + PMTiles).
+- **Narrator cites only datasets passed in evidence** — don't loosen that prompt.
+
+## Priorities (hackathon discipline)
+- **CORE (keep working):** offline map, `/analyze` with real model + real data, grounded citations.
+- **STRETCH (only if core is solid):** QLoRA fine-tune, multi-dataset fusion, NemoClaw on the box.
+- Don't overscope. **One flawless demo > five half-features.**
+
+---
+
 # Ruflo — Claude Code Configuration
 
 ## Rules
