@@ -1,4 +1,5 @@
-# Ruflo / claude-flow local tooling state (machine-local, not for the repo)
+# Ruflo / claude-flow local tooling (machine-local, regenerate with `ruflo init`)
+.claude/
 .swarm/
 .claude-flow/
 agentdb.rvf
@@ -17,3 +18,19 @@ ruvector.db
 # OS / editor
 .DS_Store
 *.swp
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Node (in case agentic-flow/tooling gets linked locally)
+node_modules/
+
+# Downloaded open-data files (fetched via scripts/download_data.py)
+data/raw/
+data/cache/

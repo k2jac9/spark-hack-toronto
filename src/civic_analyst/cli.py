@@ -1,0 +1,29 @@
+"""Command-line entry point: python -m civic_analyst.cli analyze "100 Queen St W"."""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+
+from .agents.supervisor import Supervisor
+from .graph.builder import CivicGraph
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="civic_analyst")
+    sub = parser.add_subparsers(dest="command", required=True)
+    a = sub.add_parser("analyze", help="risk read for an address")
+    a.add_argument("address")
+
+    args = parser.parse_args(argv)
+
+    if args.command == "analyze":
+        graph = CivicGraph()  # TODO: load pre-downloaded data here
+        report = Supervisor(graph).analyze(args.address)
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
