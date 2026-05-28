@@ -1,5 +1,7 @@
 # Toronto Civic Risk Analyst
 
+[![CI](https://github.com/cyberqubit/spark-hack-toronto/actions/workflows/ci.yml/badge.svg)](https://github.com/cyberqubit/spark-hack-toronto/actions/workflows/ci.yml)
+
 A **local-first, multi-agent** civic intelligence app for the **NVIDIA Spark Hack — Toronto**
 (May 29–31, 2026). It fuses several City of Toronto open datasets into a knowledge graph,
 then a supervisor agent + specialized sub-agents (running on a **local Nemotron model**
