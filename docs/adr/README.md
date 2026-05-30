@@ -8,3 +8,8 @@ supersede older ones only when explicitly marked.
 - [ADR-0003](0003-delay-model-and-honest-optimum.md) — Linear over-capacity delay + discounted hold cost for an honest optimum
 - [ADR-0004](0004-rust-core-as-optional-accelerator.md) — Rust core is an optional drop-in accelerator, numpy is the always-present fallback
 - [ADR-0005](0005-reuse-hallucination-guard-for-insight.md) — Reuse civic_analyst's hallucination guard for the killer insight
+- [ADR-0006](0006-urban-os-api-contract-and-validation.md) — Harden the API surface + pin it with a contract/regression test lane
+- [ADR-0007](0007-third-lens-weather.md) — WeatherLens: rain as a capacity tax + risk multiplier (third domain lens)
+- [ADR-0008](0008-urban-os-ui.md) — Offline congestion/risk heatmap over the vendored MapLibre/PMTiles map
+- [ADR-0009](0009-rust-accelerator-benchmark.md) — Measured Rust↔numpy parity + speedup; boundary-marshalling caveat
+- [ADR-0010](0010-narrator-hallucination-guard.md) — Narrator guard: every figure in the insight traces to the evidence
