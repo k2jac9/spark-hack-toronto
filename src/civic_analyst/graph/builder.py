@@ -11,24 +11,73 @@ import re
 import networkx as nx
 
 
+# Long street-type words -> canonical abbreviation. Each rule is keyed on a *long*
+# spelling, so a string already using the short form is left untouched — two formats
+# of the same address therefore collapse to one key. (LANE has no shorter canonical
+# in the data, so we fold the abbreviated "LN" up to "LANE" instead.)
+_STREET_TYPES: dict[str, str] = {
+    "STREET": "ST",
+    "AVENUE": "AVE",
+    "BOULEVARD": "BLVD",
+    "DRIVE": "DR",
+    "ROAD": "RD",
+    "COURT": "CRT",
+    "CRESCENT": "CRES",
+    "PLACE": "PL",
+    "TERRACE": "TER",
+    "PARKWAY": "PKWY",
+    "HIGHWAY": "HWY",
+    "SQUARE": "SQ",
+    "TRAIL": "TRL",
+    "GARDENS": "GDNS",
+    "CIRCLE": "CIR",
+    "LN": "LANE",
+}
+
+# Cardinal directions -> single letter. Longest compound forms first so "NORTHWEST"
+# isn't half-consumed by the "NORTH" rule.
+_DIRECTIONS: dict[str, str] = {
+    "NORTHWEST": "NW",
+    "NORTHEAST": "NE",
+    "SOUTHWEST": "SW",
+    "SOUTHEAST": "SE",
+    "WEST": "W",
+    "EAST": "E",
+    "NORTH": "N",
+    "SOUTH": "S",
+}
+
+# Unit / suite markers and everything that follows them is noise for a street-level
+# join (a building fuses across its units). Matched as a whole trailing segment so
+# "100 QUEEN ST W UNIT 5" -> "100 QUEEN ST W".
+_UNIT_RE = re.compile(
+    r"\b(?:UNIT|UNITS|STE|SUITE|APT|APARTMENT|FLR|FLOOR|RM|ROOM|PH|BSMT|"
+    r"LOWER|UPPER|REAR)\b.*$"
+)
+
+
 def normalize_address(raw: str) -> str:
     """Cheap address key. Deterministic cleanup of the real-world quirks seen in
     Toronto open data (embedded 'None' for missing units, trailing postal codes,
-    city/province suffixes). The harder fuzzy entity-resolution is the local-LLM
-    job — see agents/subagents."""
+    city/province suffixes, varied street-type spellings, unit/suite noise). The
+    harder fuzzy entity-resolution is the local-LLM job — see agents/subagents."""
     s = raw.upper().strip()
-    s = re.sub(r"[.,]", " ", s)
+    # '#' introduces a unit; turn it into a UNIT marker so the unit segment is dropped
+    # below (and a trailing unit number can't masquerade as a street number).
+    s = s.replace("#", " UNIT ")
+    # Strip punctuation that varies between feeds ("ST." vs "ST", "1/2", "A;B").
+    # Apostrophes are preserved so O'CONNOR stays one token.
+    s = re.sub(r"[.,;:/\\]", " ", s)
     # Drop Canadian postal codes (e.g. "M4A 1X1") and literal 'NONE' unit placeholders.
     s = re.sub(r"\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b", " ", s)
     s = re.sub(r"\bNONE\b", " ", s)
     s = re.sub(r"\b(TORONTO|ONTARIO|ON|CANADA)\b", " ", s)
-    s = re.sub(r"\bSTREET\b", "ST", s)
-    s = re.sub(r"\bAVENUE\b", "AVE", s)
-    s = re.sub(r"\bBOULEVARD\b", "BLVD", s)
-    s = re.sub(r"\bWEST\b", "W", s)
-    s = re.sub(r"\bEAST\b", "E", s)
-    s = re.sub(r"\bNORTH\b", "N", s)
-    s = re.sub(r"\bSOUTH\b", "S", s)
+    # Strip unit/suite noise (and everything after it) before canonicalising tokens.
+    s = _UNIT_RE.sub(" ", s)
+    for long, short in _STREET_TYPES.items():
+        s = re.sub(rf"\b{long}\b", short, s)
+    for long, short in _DIRECTIONS.items():
+        s = re.sub(rf"\b{long}\b", short, s)
     return re.sub(r"\s+", " ", s).strip()
 
 

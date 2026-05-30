@@ -15,6 +15,60 @@ def test_normalize_strips_real_world_noise():
     )
 
 
+def test_normalize_expands_more_street_types():
+    # Full long-form, comma-laden, postal-coded address must collapse to the same
+    # key the loader's part-based short form produces.
+    assert normalize_address("123 Main Street West, Toronto, ON M5V 1A1") == "123 MAIN ST W"
+    assert normalize_address("123 Main Street West, Toronto, ON M5V 1A1") == normalize_address(
+        "123 MAIN ST W"
+    )
+    # Newly-supported street types all abbreviate to the canonical short form.
+    for long, short in [
+        ("Drive", "DR"),
+        ("Road", "RD"),
+        ("Court", "CRT"),
+        ("Crescent", "CRES"),
+        ("Place", "PL"),
+        ("Terrace", "TER"),
+    ]:
+        assert normalize_address(f"50 Oak {long}") == f"50 OAK {short}"
+    # LANE: the long word and the "LN" abbreviation must agree on one key.
+    assert normalize_address("9 Foundry Lane") == normalize_address("9 Foundry Ln")
+
+
+def test_normalize_strips_unit_suite_noise():
+    base = "100 Queen St W"
+    for noisy in [
+        "100 Queen St W Unit 5",
+        "100 Queen St W, Suite 200",
+        "100 Queen St W Ste 12",
+        "100 Queen St W #404",
+        "100 Queen St W Flr 3",
+        "100 Queen St W Apt 6B",
+    ]:
+        assert normalize_address(noisy) == normalize_address(base), noisy
+
+
+def test_normalize_handles_punctuation_and_spacing_quirks():
+    # "ST." vs "ST", doubled spaces and stray punctuation must not fragment the key.
+    assert normalize_address("100 Queen St. W") == "100 QUEEN ST W"
+    assert normalize_address("100   Queen   St   W") == "100 QUEEN ST W"
+    assert normalize_address("100 Queen St W;") == "100 QUEEN ST W"
+
+
+def test_real_world_variants_fuse_to_one_node():
+    # Two real-world formats of the same address (long form + postal/unit vs. the
+    # short loader form) must land on a single fused address node carrying all three.
+    g = CivicGraph()
+    g.add_record("permit", "P1", "12 Yonge Street, Toronto, ON M5E 1J9", status="open")
+    g.add_record("inspection", "I1", "12 Yonge St Unit 3", outcome="Fail")
+    g.add_record("licence", "L1", "12 YONGE ST", status="active")
+
+    assert len(g.addresses()) == 1  # one physical building, one node
+    kinds = sorted(r["kind"] for r in g.records_for("12 Yonge St"))
+    assert kinds == ["inspection", "licence", "permit"]
+
+
 def test_records_attach_to_address():
     g = CivicGraph()
     g.add_record("permit", "P1", "100 Queen St W", status="open")
