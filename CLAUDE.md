@@ -23,7 +23,8 @@ Layout: `src/civic_analyst/{ingest,graph,agents,api}`, `tests/`, `scripts/`, `de
 ## Golden commands (run before every push)
 - `make test`   — `PYTHONPATH=src pytest`; **must be green** (CI enforces it on main)
 - `make demo`   — offline map + real downtown data at http://localhost:8000/
-- `make demo-cli` — deterministic fixture check (100 Queen St W → 0.826, "high")
+- `make demo-cli` — deterministic fixture check (100 Queen St W → two indices, ADR 0014:
+  safety 0.593 "medium" · activity 0.113 "low")
 
 ## Collaboration (two people, two Claude sessions)
 - **First clone setup:** `make install` then **`make install-hooks`** (enables a pre-push

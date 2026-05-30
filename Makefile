@@ -66,6 +66,8 @@ demo-data:
 	PYTHONPATH=src $(PYTHON) scripts/build_demo_slice.py
 
 # Quick deterministic check (synthetic fixtures): prints a populated report and exits.
+# 100 Queen St W → two independent indices (ADR 0014):
+#   safety 0.593 (medium, 2 adverse visits) · activity 0.113 (low, 2 open permits).
 demo-cli:
 	DATA_DIR=$(FIXTURES) PYTHONPATH=src $(PYTHON) -m civic_analyst.cli analyze "100 Queen St W"
 

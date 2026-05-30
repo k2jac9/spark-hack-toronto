@@ -19,12 +19,15 @@ import threading
 from .llm import LocalLLM, batch_llm
 
 SYSTEM = (
-    "You are a municipal operations analyst. Given a ranked list of Toronto "
-    "addresses with risk scores and counts, write a 4-sentence briefing for an "
-    "inspections manager: the top hotspots, the dominant risk pattern, and where "
-    "to deploy inspectors first. Be specific and do not invent addresses. Do not "
-    "editorialize about data completeness (e.g. missing fields, postal codes, or "
-    "null values) — report only on risk."
+    "You are a municipal operations analyst. You are given TWO independent priority "
+    "lists of Toronto addresses: a FOOD SAFETY list (ranked by adverse inspection "
+    "visits) and a CONSTRUCTION ACTIVITY list (ranked by open building permits). "
+    "These are SEPARATE risk axes — never blend or total them. Write a 4-sentence "
+    "briefing for an inspections manager: name the top food-safety hotspots and the "
+    "top construction-activity hotspots SEPARATELY, and say where to deploy health "
+    "inspectors vs building inspectors first. Be specific and do not invent "
+    "addresses. Do not editorialize about data completeness (e.g. missing fields, "
+    "postal codes, or null values) — report only on risk."
 )
 
 # Raw DineSafe labels embed a literal "None" street-direction token, e.g.
@@ -52,14 +55,32 @@ def _addr(r: dict) -> str:
     return _clean_label(r.get("address") or r.get("label") or "?")
 
 
+def _safety(r: dict) -> float:
+    return round(float(r.get("risk_safety", 0.0)), 3)
+
+
+def _activity(r: dict) -> float:
+    return round(float(r.get("risk_activity", 0.0)), 3)
+
+
+def _priorities(ranked: list[dict], score, top: int = 25) -> list[tuple[str, float]]:
+    """The top addresses on one axis, hottest-first, dropping zero-risk sites — a
+    standalone priority list for that axis (Safety or Activity), per ADR 0014 §7."""
+    rows = [(_addr(r), score(r)) for r in ranked]
+    rows = [(a, s) for a, s in rows if s > 0]
+    rows.sort(key=lambda x: x[1], reverse=True)
+    return rows[:top]
+
+
 def _signature(ranked: list[dict]) -> tuple:
-    """Stable cache key for the ranked set: (address, rounded score) pairs in order.
+    """Stable cache key for the ranked set: BOTH per-axis priority lists (ADR 0014).
 
     Rounding keeps the key stable against insignificant float jitter while still
-    invalidating when the underlying ranking would actually differ (the digest
-    only ever consumes the top 25, so the key mirrors that window)."""
-    return tuple(
-        (_addr(r), round(float(r.get("risk_score", 0.0)), 3)) for r in ranked[:25]
+    invalidating when either axis's ranking would actually differ (the digest
+    only ever consumes the top 25 of each list, so the key mirrors that window)."""
+    return (
+        tuple(_priorities(ranked, _safety)),
+        tuple(_priorities(ranked, _activity)),
     )
 
 
@@ -69,6 +90,13 @@ def digest_cached(ranked: list[dict]) -> bool:
         return _signature(ranked) in _cache
 
 
+def _axis_block(title: str, rows: list[tuple[str, float]]) -> str:
+    if not rows:
+        return f"{title}: (none on record)"
+    body = "\n".join(f"- {a}: {s}" for a, s in rows)
+    return f"{title}:\n{body}"
+
+
 def city_digest(ranked: list[dict], llm: LocalLLM | None = None) -> str:
     key = _signature(ranked)
     with _lock:
@@ -76,13 +104,21 @@ def city_digest(ranked: list[dict], llm: LocalLLM | None = None) -> str:
     if hit is not None:
         return hit
 
+    safety = _priorities(ranked, _safety)
+    activity = _priorities(ranked, _activity)
     llm = llm or batch_llm()
-    lines = "\n".join(f"- {_addr(r)}: risk {r['risk_score']}" for r in ranked[:25])
+    user = (
+        _axis_block("FOOD SAFETY priorities (by adverse inspection visits)", safety)
+        + "\n\n"
+        + _axis_block("CONSTRUCTION ACTIVITY priorities (by open permits)", activity)
+    )
     try:
-        result = llm.chat(SYSTEM, f"Ranked addresses:\n{lines}")
+        result = llm.chat(SYSTEM, user)
     except Exception as exc:  # offline / no model: deterministic fallback (NOT cached)
-        top = _addr(ranked[0]) if ranked else "n/a"
-        return f"(batch LLM unavailable: {exc}) Highest-risk address: {top}."
+        top_s = safety[0][0] if safety else "n/a"
+        top_a = activity[0][0] if activity else "n/a"
+        return (f"(batch LLM unavailable: {exc}) Top food-safety site: {top_s}; "
+                f"top construction-activity site: {top_a}.")
 
     with _lock:
         _cache[key] = result

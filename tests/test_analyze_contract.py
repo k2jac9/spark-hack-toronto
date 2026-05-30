@@ -82,11 +82,13 @@ def test_addresses_contract(client: TestClient) -> None:
     assert isinstance(addrs, list)
     assert addrs, "demo slice should yield geocoded addresses"
     for a in addrs:
-        assert {"label", "lat", "lng", "risk_score"} <= a.keys()
+        assert {"label", "lat", "lng", "risk_safety", "risk_activity"} <= a.keys()
+        assert "risk_score" not in a  # no blended public score (ADR 0014)
         assert isinstance(a["label"], str) and a["label"]
         assert isinstance(a["lat"], numbers.Real) and not isinstance(a["lat"], bool)
         assert isinstance(a["lng"], numbers.Real) and not isinstance(a["lng"], bool)
-        assert _is_unit_interval(a["risk_score"]), a["risk_score"]
+        assert _is_unit_interval(a["risk_safety"]), a["risk_safety"]
+        assert _is_unit_interval(a["risk_activity"]), a["risk_activity"]
 
 
 # --------------------------------------------------------------------------- #
@@ -103,8 +105,10 @@ def test_analyze_response_keys(client: TestClient) -> None:
         "address",
         "found",
         "matched_address",
-        "risk_score",
-        "risk_band",
+        "risk_safety",
+        "band_safety",
+        "risk_activity",
+        "band_activity",
         "narrative",
         "findings",
         "evidence",
@@ -112,14 +116,21 @@ def test_analyze_response_keys(client: TestClient) -> None:
         "claims",
     }
     assert expected <= body.keys(), expected - body.keys()
+    # No blended single score/band leaks through (ADR 0014).
+    assert "risk_score" not in body and "risk_band" not in body
 
 
 @_demo_required
-def test_analyze_hero_found_and_high_band(client: TestClient) -> None:
+def test_analyze_hero_found_and_flagged(client: TestClient) -> None:
+    """The hero fuses 3 datasets — open permits AND adverse inspections — so it must
+    be FLAGGED on at least one axis (band above 'none'/'low'), per the two-index
+    model. (It is medium on both axes in the committed slice.)"""
     body = _analyze(client, HERO)
     assert body["found"] is True
-    assert body["risk_band"] == "high"
-    assert _is_unit_interval(body["risk_score"])
+    assert _is_unit_interval(body["risk_safety"])
+    assert _is_unit_interval(body["risk_activity"])
+    flagged = {"medium", "high"}
+    assert body["band_safety"] in flagged or body["band_activity"] in flagged
 
 
 @_demo_required
@@ -170,11 +181,13 @@ def test_analyze_no_dangling_citations(client: TestClient) -> None:
 
 @_demo_required
 def test_analyze_is_deterministic(client: TestClient) -> None:
-    """Same address twice → identical risk_score and risk_band (LLM-free path)."""
+    """Same address twice → identical per-axis scores and bands (LLM-free path)."""
     a = _analyze(client, HERO)
     b = _analyze(client, HERO)
-    assert a["risk_score"] == b["risk_score"]
-    assert a["risk_band"] == b["risk_band"]
+    assert a["risk_safety"] == b["risk_safety"]
+    assert a["risk_activity"] == b["risk_activity"]
+    assert a["band_safety"] == b["band_safety"]
+    assert a["band_activity"] == b["band_activity"]
 
 
 # --------------------------------------------------------------------------- #

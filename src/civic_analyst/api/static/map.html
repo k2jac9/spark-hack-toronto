@@ -44,6 +44,15 @@
     #score { font-size: var(--fs-score); font-weight: 700; line-height: 1; }
     #score .scale { font-size: var(--fs-scale); font-weight: 600; color: var(--text-dim); }
     .scorecap { font-size: var(--fs-cap); color: var(--text-muted); }
+    /* Two-index badges (ADR 0014): Safety + Activity shown side by side, never summed. */
+    .idxrow { display: flex; gap: 10px; margin: 14px 0 2px; flex-wrap: wrap; }
+    .idx { flex: 1 1 0; min-width: 120px; background: var(--surface-2);
+           border: 1px solid var(--border-2); border-radius: var(--r-lg); padding: 8px 10px; }
+    .idx .idx-h { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em;
+                  color: var(--text-muted); font-weight: 700; }
+    .idx .idx-score { font-size: 30px; font-weight: 700; line-height: 1.1; }
+    .idx .idx-score .scale { font-size: var(--fs-cap); font-weight: 600; color: var(--text-dim); }
+    .idx .idx-band { font-size: var(--fs-sm); font-weight: 700; letter-spacing: .04em; }
     .band { font-size: var(--fs-body); font-weight: 700; letter-spacing: .04em; margin-top: 2px; }
     #claims li { margin: 6px 0; font-size: var(--fs-body); }
     .agentcap { font-size: var(--fs-cap); color: var(--text-dim); margin-top: 4px; }
@@ -177,10 +186,12 @@
     .infoboard .ib-foot { font-size: var(--fs-xs); color: #6fb0c4; margin-top: 6px; }
     .infoboard .ib-stem { position: absolute; left: 50%; bottom: -18px; width: 1px; height: 18px;
       background: linear-gradient(#00e5ff, transparent); transform: translateX(-50%); }
-    .infoboard.b-high .ib-score { color: var(--risk-high); }
-    .infoboard.b-medium .ib-score { color: var(--risk-medium); }
-    .infoboard.b-low .ib-score { color: var(--risk-low); }
-    .infoboard.b-none .ib-score { color: var(--risk-none); }
+    /* Each index line colors by its OWN band (Safety / Activity are independent). */
+    .infoboard .ib-score.b-high { color: var(--risk-high); }
+    .infoboard .ib-score.b-medium { color: var(--risk-medium); }
+    .infoboard .ib-score.b-low { color: var(--risk-low); }
+    .infoboard .ib-score.b-none { color: var(--risk-none); }
+    .infoboard .ib-score { font-size: 24px; }   /* two lines now → slightly smaller */
     /* Keep hover tooltips below the floating info card so they never smear over it. */
     .maplibregl-popup { z-index: 2; }
     .maplibregl-marker { z-index: 3; }
@@ -198,6 +209,9 @@
       <li class="b-high">▲ High</li><li class="b-medium">◆ Medium</li>
       <li class="b-low">● Low</li><li class="b-none">· OK</li>
     </ul>
+    <p class="hint" style="margin:4px 0 0">Two independent axes — <b>Safety</b> (food
+      inspections) and <b>Activity</b> (open permits). A pin is flagged if <i>either</i>
+      axis is elevated.</p>
     <div id="status" class="hint" role="status" aria-live="polite">Loading addresses…</div>
     <h2>Hero pins</h2>
     <div class="quickrow" id="herorow" aria-label="Jump to a hero address">
@@ -232,6 +246,10 @@
       none:   { sym: '·', label: 'OK' },
     };
     const bandOf = (r) => r >= 0.67 ? 'high' : r >= 0.34 ? 'medium' : r > 0 ? 'low' : 'none';
+    // Two-index model (ADR 0014): a site is flagged if EITHER axis is elevated, so its
+    // pin/list color tracks the hotter of the two scores — never a blended number.
+    const worstScore = (r) => Math.max(+(r.risk_safety || 0), +(r.risk_activity || 0));
+    const worstBand = (r) => bandOf(worstScore(r));
     let ADDR_ROWS = [];
     let PRES = false, mapReady = false;   // Presentation Mode (cyber + 3D), default off
 
@@ -309,7 +327,26 @@
         return;
       }
 
-      const band = BANDS[d.risk_band] || BANDS.none;
+      // Two independent indices (ADR 0014): Safety (food) + Activity (construction).
+      const sBand = BANDS[d.band_safety] || BANDS.none;
+      const aBand = BANDS[d.band_activity] || BANDS.none;
+      const idxRow =
+        '<div class="idxrow">' +
+          '<div class="idx" role="img" aria-label="Food safety index ' + d.risk_safety +
+            ' out of 1, ' + sBand.label + '">' +
+            '<div class="idx-h">Food safety</div>' +
+            '<div class="idx-score b-' + d.band_safety + '">' + d.risk_safety +
+              '<span class="scale"> / 1</span></div>' +
+            '<div class="idx-band b-' + d.band_safety + '">' + sBand.sym + ' ' + sBand.label +
+            '</div></div>' +
+          '<div class="idx" role="img" aria-label="Construction activity index ' + d.risk_activity +
+            ' out of 1, ' + aBand.label + '">' +
+            '<div class="idx-h">Construction activity</div>' +
+            '<div class="idx-score b-' + d.band_activity + '">' + d.risk_activity +
+              '<span class="scale"> / 1</span></div>' +
+            '<div class="idx-band b-' + d.band_activity + '">' + aBand.sym + ' ' + aBand.label +
+            '</div></div>' +
+        '</div>';
       const claims = (d.claims || []).map((c, i) => {
         const s = c.source;
         if (!s) return '<li>' + esc(c.text) + '</li>';
@@ -345,11 +382,8 @@
         '<button class="back" type="button" onclick="resetOverview()">← Overview</button>' +
         '<h2 id="addr-label" hidden>Address</h2>' +
         '<div id="addr-h">' + esc(d.matched_address || d.address) + '</div>' +
-        '<div class="scorewrap"><div id="score" class="b-' + d.risk_band +
-        '" role="img" aria-label="Risk score ' + d.risk_score + ' out of 1, ' + band.label +
-        '">' + d.risk_score + '<span class="scale"> / 1</span></div>' +
-        '<div><div class="band b-' + d.risk_band + '">' + band.sym + ' ' + band.label +
-        ' RISK</div><div class="scorecap">Risk score (0–1)</div></div></div>' +
+        idxRow +
+        '<p class="scorecap">Two independent risk indices (0–1) — never summed.</p>' +
         '<h2>Assessment <span class="hint" style="text-transform:none;letter-spacing:0">' +
         '(verify each claim against its source)</span></h2>' +
         '<ul id="claims">' + claims + '</ul>' +
@@ -400,13 +434,24 @@
         const brief = d.digest
           ? '<div class="digest-brief">' + esc(d.digest) + '</div>'
           : '<p class="hint">No briefing text returned.</p>';
-        const ranked = (d.ranked || []).slice(0, 5).map((r) => {
-          const k = bandOf(r.risk_score);
-          return '<li><span class="rk-score b-' + k + '">' + r.risk_score + '</span>' +
-            '<button type="button" data-label="' + esc(r.label) + '">' + esc(r.label) + '</button></li>';
-        }).join('');
+        // Two priority lists (ADR 0014): top safety hotspots + top activity hotspots,
+        // each ranked by its OWN axis — never a blended score.
+        const topList = (scoreKey, title) => {
+          const rows = (d.ranked || [])
+            .map((r) => ({ label: r.label, s: +(r[scoreKey] || 0) }))
+            .filter((r) => r.s > 0)
+            .sort((a, b) => b.s - a.s)
+            .slice(0, 5)
+            .map((r) => '<li><span class="rk-score b-' + bandOf(r.s) + '">' + r.s + '</span>' +
+              '<button type="button" data-label="' + esc(r.label) + '">' + esc(r.label) +
+              '</button></li>').join('');
+          return rows
+            ? '<h2>' + title + '</h2><ul id="digest-rank">' + rows + '</ul>'
+            : '<h2>' + title + '</h2><p class="hint">None on record.</p>';
+        };
         digestOut.innerHTML = brief +
-          (ranked ? '<h2>Top 5 by risk</h2><ul id="digest-rank">' + ranked + '</ul>' : '');
+          topList('risk_safety', 'Top food-safety priorities') +
+          topList('risk_activity', 'Top construction-activity priorities');
       } catch (err) {
         digestOut.innerHTML = '<div class="err" role="alert">Could not load the city digest (' +
           esc(err.message) + '). The map and per-address analysis still work — try again.</div>';
@@ -427,10 +472,12 @@
     function renderAddressList(rows) {
       document.getElementById('addrhead').hidden = false;
       const ul = document.getElementById('addrlist');
-      ul.innerHTML = rows.slice().sort((a, b) => b.risk_score - a.risk_score).map((a) => {
-        const k = bandOf(a.risk_score), b = BANDS[k];
+      ul.innerHTML = rows.slice().sort((a, b) => worstScore(b) - worstScore(a)).map((a) => {
+        const k = worstBand(a), b = BANDS[k];
+        const aria = esc(a.label) + ', safety ' + (a.risk_safety ?? 0) +
+          ', activity ' + (a.risk_activity ?? 0);
         return '<li><button type="button" class="addr band-' + k + '" data-label="' + esc(a.label) +
-          '" aria-label="' + esc(a.label) + ', ' + b.label + ' risk, score ' + a.risk_score + '">' +
+          '" aria-label="' + aria + '">' +
           '<span class="sym" aria-hidden="true">' + b.sym + '</span>' +
           '<span class="bandlbl">' + b.label + '</span>' +
           '<span class="lbl">' + esc(a.label) + '</span></button></li>';
@@ -484,16 +531,21 @@
     // The 3D info board: a screen-facing HTML billboard anchored above the building. Full
     // styling, no glyph fonts needed — stays offline. Shows risk + datasets + recommendation.
     function showBoard(row, d) {
-      const band = BANDS[d.risk_band] || BANDS.none;
+      // Two-index board (ADR 0014): show Safety + Activity, color by the hotter axis.
+      const sBand = BANDS[d.band_safety] || BANDS.none;
+      const aBand = BANDS[d.band_activity] || BANDS.none;
+      const worst = bandOf(Math.max(+(d.risk_safety || 0), +(d.risk_activity || 0)));
       const datasets = [...new Set((d.evidence || []).map((e) => shortDataset(e.dataset)))]
         .map((s) => '<span class="ib-chip">' + esc(s) + '</span>').join('');
       const rec = (d.claims || []).map((c) => c.text).slice(-1)[0] || '';
       const el = document.createElement('div');
-      el.className = 'infoboard b-' + d.risk_band;
+      el.className = 'infoboard b-' + worst;
       el.innerHTML =
         '<div class="ib-h">' + esc(d.matched_address || row.label) + '</div>' +
-        '<div class="ib-score">' + d.risk_score +
-          '<span class="ib-band">' + band.sym + ' ' + band.label + '</span></div>' +
+        '<div class="ib-score b-' + d.band_safety + '">' + (d.risk_safety ?? 0) +
+          '<span class="ib-band">Safety ' + sBand.sym + ' ' + sBand.label + '</span></div>' +
+        '<div class="ib-score b-' + d.band_activity + '">' + (d.risk_activity ?? 0) +
+          '<span class="ib-band">Activity ' + aBand.sym + ' ' + aBand.label + '</span></div>' +
         (datasets ? '<div class="ib-chips">' + datasets + '</div>' : '') +
         (rec ? '<div class="ib-rec">' + esc(rec) + '</div>' : '') +
         '<div class="ib-foot">✓ verify each claim in the panel →</div>' +
@@ -536,7 +588,7 @@
         if (map.getLayer('focusbld')) map.removeLayer('focusbld');
         if (map.getSource('focusbld')) map.removeSource('focusbld');
         if (!target) return;
-        const col = { high: '#ff3b6b', medium: '#ffb020', low: '#ffe34d', none: '#2bff88' }[bandOf(row.risk_score)];
+        const col = { high: '#ff3b6b', medium: '#ffb020', low: '#ffe34d', none: '#2bff88' }[worstBand(row)];
         map.addSource('focusbld', { type: 'geojson',
           data: { type: 'Feature', properties: target.properties, geometry: target.geometry } });
         map.addLayer({ id: 'focusbld', source: 'focusbld', type: 'fill-extrusion',
@@ -583,7 +635,10 @@
           type: 'FeatureCollection',
           features: rows.map((a) => ({
             type: 'Feature',
-            properties: { label: a.label, risk: a.risk_score },
+            // `risk` colors the pin by the hotter axis (ADR 0014); the two raw axis
+            // scores ride along so the hover tooltip can show both, never a blend.
+            properties: { label: a.label, risk: worstScore(a),
+                          rs: +(a.risk_safety || 0), ra: +(a.risk_activity || 0) },
             geometry: { type: 'Point', coordinates: [a.lng, a.lat] }
           }))
         }
@@ -609,10 +664,13 @@
         // In presentation mode the floating info card sits over the focused pin; don't
         // smear the hover tooltip across it. Suppress the tooltip while a card is open.
         if (infoBoard) return;
-        const p = e.features[0].properties, k = bandOf(p.risk), b = BANDS[k];
+        const p = e.features[0].properties;
+        const sk = bandOf(+p.rs), ak = bandOf(+p.ra), sb = BANDS[sk], ab = BANDS[ak];
         hoverPopup.setLngLat(e.lngLat)
-          .setHTML('<b>' + esc(p.label) + '</b><br><span class="b-' + k + '">' + b.sym + ' ' +
-                   b.label + ' · ' + p.risk + '</span>').addTo(map);
+          .setHTML('<b>' + esc(p.label) + '</b><br>' +
+                   '<span class="b-' + sk + '">Safety ' + sb.sym + ' ' + (+p.rs) + '</span> · ' +
+                   '<span class="b-' + ak + '">Activity ' + ab.sym + ' ' + (+p.ra) + '</span>')
+          .addTo(map);
       });
       map.on('mouseleave', 'risk-pins', () => {
         map.getCanvas().style.cursor = ''; hoverPopup.remove();

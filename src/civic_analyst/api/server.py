@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from ..agents.digest import city_digest, digest_cached
 from ..agents.llm import interactive_llm
 from ..agents.supervisor import Supervisor
+from ..agents.verify import risk_band
 from ..config import settings
 from ..graph.builder import CivicGraph
 from ..ingest.loader import load_into_graph
@@ -81,22 +82,37 @@ def health() -> dict:
     }
 
 
+def _worst_axis(row: dict) -> float:
+    """A single hottest-axis sort key WITHOUT blending the two indices: a site
+    ranks by whichever axis is most elevated (ADR 0014). Used only for ordering,
+    never surfaced as a public score."""
+    return max(float(row.get("risk_safety", 0.0)), float(row.get("risk_activity", 0.0)))
+
+
 def _ranked_addresses() -> list[dict]:
-    """Addresses sorted hottest-first — the ranked set the digest summarizes."""
-    return sorted(addresses(), key=lambda r: r["risk_score"], reverse=True)
+    """Addresses sorted hottest-first — the ranked set the digest summarizes. Ordered
+    by the worse of the two axes (either elevated axis flags a site), not a blend."""
+    return sorted(addresses(), key=_worst_axis, reverse=True)
 
 
 @app.get("/addresses")
 def addresses() -> list[dict]:
-    """Geocoded addresses with a fast (LLM-free) risk score — drives the map pins."""
+    """Geocoded addresses with fast (LLM-free) per-axis risk — drives the map pins.
+
+    Returns BOTH indices and BOTH bands (safety + activity); the pin is colored by
+    whichever axis is hottest (ADR 0014) — never a single blended score."""
     out = []
     for a in _graph.addresses(with_coords=True):
+        scores = _supervisor.score_only(a["label"])
         out.append(
             {
                 "label": a["label"],
                 "lat": a["lat"],
                 "lng": a["lng"],
-                "risk_score": _supervisor.score_only(a["label"]),
+                "risk_safety": scores["risk_safety"],
+                "band_safety": risk_band(scores["risk_safety"]),
+                "risk_activity": scores["risk_activity"],
+                "band_activity": risk_band(scores["risk_activity"]),
             }
         )
     return out

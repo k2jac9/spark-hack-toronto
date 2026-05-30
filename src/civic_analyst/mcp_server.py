@@ -17,6 +17,7 @@ from pathlib import Path
 
 from .agents.digest import city_digest as _city_digest
 from .agents.supervisor import Supervisor
+from .agents.verify import risk_band
 from .config import settings
 from .graph.builder import CivicGraph
 from .ingest.ckan import CKANClient
@@ -110,18 +111,26 @@ def analyze_address(address: str) -> dict:
 
 
 def top_risk(limit: int = 10) -> list[dict]:
-    """Highest-risk geocoded addresses currently loaded (LLM-free scoring)."""
+    """Highest-risk geocoded addresses currently loaded (LLM-free scoring).
+
+    Each row carries BOTH independent indices (safety + activity) and their bands
+    (ADR 0014). Ranking is by whichever axis is hottest — either elevated axis flags
+    a site — never a blended score."""
     n = _clamp_limit(limit)
-    scored = [
-        {
+    scored = []
+    for a in _graph.addresses(with_coords=True):
+        s = _supervisor.score_only(a["label"])
+        scored.append({
             "address": a["label"],
             "lat": a["lat"],
             "lng": a["lng"],
-            "risk_score": _supervisor.score_only(a["label"]),
-        }
-        for a in _graph.addresses(with_coords=True)
-    ]
-    return sorted(scored, key=lambda r: r["risk_score"], reverse=True)[:n]
+            "risk_safety": s["risk_safety"],
+            "band_safety": risk_band(s["risk_safety"]),
+            "risk_activity": s["risk_activity"],
+            "band_activity": risk_band(s["risk_activity"]),
+        })
+    scored.sort(key=lambda r: max(r["risk_safety"], r["risk_activity"]), reverse=True)
+    return scored[:n]
 
 
 def city_digest(limit: int = 25) -> str:
