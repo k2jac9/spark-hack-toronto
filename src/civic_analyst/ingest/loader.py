@@ -46,9 +46,27 @@ _ADDRESS_PART_KEYWORDS = (
 _ROW_LIMIT = 5000  # cap per file for a snappy demo on the GX10
 
 
+def _norm_header(col: Any) -> str:
+    """Lowercase + strip a header for matching, tolerating BOM, NBSP, stray
+    surrounding whitespace and embedded newlines from real-world CSV exports.
+    The original column name is what we look up rows by, so this only affects
+    matching — never the row-key used to read a value."""
+    return (
+        str(col)
+        .replace("﻿", "")  # UTF-8 BOM pandas can leave on the first header
+        .replace("\xa0", " ")  # non-breaking space
+        .replace("\n", " ")
+        .replace("\r", " ")
+        .strip()
+        .lower()
+    )
+
+
 def _find_col(columns: list[str], keywords: tuple[str, ...]) -> str | None:
+    """First column whose normalized name contains any keyword. Returns the
+    *original* column name so row lookups by the unmodified header still work."""
     for col in columns:
-        low = col.lower()
+        low = _norm_header(col)
         if any(kw in low for kw in keywords):
             return col
     return None
@@ -73,12 +91,20 @@ def _resolve_plan(columns: list[str], kind: str) -> dict[str, Any]:
     }
 
 
+def _clean_value(val: Any) -> str:
+    """Collapse any whitespace (incl. embedded newlines/tabs from multiline CSV
+    cells) to single spaces and strip. Empty / missing becomes ''."""
+    if val is None:
+        return ""
+    return " ".join(str(val).split())
+
+
 def _address(row: dict[str, Any], plan: dict[str, Any]) -> str | None:
     if plan["address_single"]:
-        val = str(row.get(plan["address_single"], "")).strip()
+        val = _clean_value(row.get(plan["address_single"]))
         return val or None
     if plan["address_parts"]:
-        parts = [str(row.get(c, "")).strip() for c in plan["address_parts"]]
+        parts = [_clean_value(row.get(c)) for c in plan["address_parts"]]
         joined = " ".join(p for p in parts if p)
         return joined or None
     return None
@@ -87,8 +113,14 @@ def _address(row: dict[str, Any], plan: dict[str, Any]) -> str | None:
 def _read_rows(path: Path) -> tuple[list[str], list[dict[str, Any]]]:
     if path.suffix.lower() == ".json":
         data = json.loads(path.read_text())
-        rows = data if isinstance(data, list) else data.get("records", [])
-        rows = rows[:_ROW_LIMIT]
+        if isinstance(data, list):
+            rows = data
+        elif isinstance(data, dict):
+            rows = data.get("records", [])
+        else:
+            rows = []
+        # Keep only dict rows (a stray scalar/list entry shouldn't break the load).
+        rows = [r for r in rows[:_ROW_LIMIT] if isinstance(r, dict)]
         columns = list(rows[0].keys()) if rows else []
         return columns, rows
     df = pd.read_csv(path, dtype=str, nrows=_ROW_LIMIT).fillna("")
@@ -121,11 +153,18 @@ def load_file(graph: CivicGraph, key: str, path: Path) -> int:
 
 
 def _coord(row: dict[str, Any], col: str | None) -> float | None:
+    """Parse a lat/lng cell, swallowing missing/blank/malformed values."""
     if not col:
         return None
+    raw = row.get(col)
+    if raw is None:
+        return None
     try:
-        return float(row[col])
-    except (KeyError, TypeError, ValueError):
+        text = str(raw).strip()
+        if not text:
+            return None
+        return float(text)
+    except (TypeError, ValueError):
         return None
 
 
@@ -138,7 +177,12 @@ def load_into_graph(graph: CivicGraph, data_dir: Path | None = None) -> dict[str
     for key in REGISTRY:
         count = 0
         for path in sorted([*data_dir.glob(f"{key}__*.csv"), *data_dir.glob(f"{key}__*.json")]):
-            count += load_file(graph, key, path)
+            try:
+                count += load_file(graph, key, path)
+            except Exception:
+                # A single malformed/unreadable file must not abort the whole load
+                # (offline-safe boundary): skip it and keep ingesting the rest.
+                continue
         if count:
             summary[key] = count
     return summary

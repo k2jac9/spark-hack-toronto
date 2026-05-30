@@ -1,12 +1,23 @@
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from civic_analyst.graph.builder import CivicGraph
 from civic_analyst.ingest.loader import load_into_graph
+
+# Repo-root demo_data slice (tests live in <repo>/tests/).
+_DEMO_DATA = Path(__file__).resolve().parent.parent / "demo_data"
 
 
 def _write(p: Path, name: str, content: str) -> None:
     (p / name).write_text(textwrap.dedent(content).strip() + "\n")
+
+
+def _write_raw(p: Path, name: str, content: str) -> None:
+    """Write content verbatim (no dedent/strip) — for headers with exact
+    whitespace/BOM that the matcher must tolerate."""
+    (p / name).write_text(content)
 
 
 def test_loads_single_address_and_composite_address(tmp_path: Path):
@@ -45,3 +56,116 @@ def test_loads_single_address_and_composite_address(tmp_path: Path):
 
 def test_missing_data_dir_is_safe(tmp_path: Path):
     assert load_into_graph(CivicGraph(), tmp_path / "nope") == {}
+
+
+def test_messy_headers_bom_whitespace_and_case(tmp_path: Path):
+    # Header row carries a UTF-8 BOM on the first column, surrounding spaces, and
+    # mixed case — column resolution must still find address/status/id/coords.
+    _write_raw(
+        tmp_path,
+        "dinesafe__messy.csv",
+        "﻿ _id ,  Establishment Address  , STATUS ,Latitude,Longitude\n"
+        "1,100 Queen St W,Fail,43.65,-79.38\n",
+    )
+    graph = CivicGraph()
+    summary = load_into_graph(graph, tmp_path)
+    assert summary == {"dinesafe": 1}
+
+    recs = graph.records_for("100 Queen St W", kind="inspection")
+    assert len(recs) == 1
+    assert recs[0]["outcome"] == "Fail"
+    # Coords resolved despite the messy 'Latitude'/'Longitude' headers.
+    coords = graph.addresses(with_coords=True)
+    assert coords and coords[0]["lat"] == 43.65 and coords[0]["lng"] == -79.38
+
+
+def test_missing_state_and_date_columns_are_skipped_not_crashed(tmp_path: Path):
+    # No STATUS, no DATE column at all — load still succeeds, attrs just omitted.
+    _write(
+        tmp_path,
+        "dinesafe__bare.csv",
+        """
+        _id,Establishment Address
+        1,55 Bloor St E
+        """,
+    )
+    graph = CivicGraph()
+    summary = load_into_graph(graph, tmp_path)
+    assert summary == {"dinesafe": 1}
+    rec = graph.records_for("55 Bloor St E", kind="inspection")[0]
+    assert "outcome" not in rec and "date" not in rec
+
+
+def test_empty_address_parts_and_stray_whitespace(tmp_path: Path):
+    # Row 1: composite parts present -> address built.
+    # Row 2: every street part blank -> skipped (no address).
+    # Row 3: single-column dinesafe with embedded newline + extra spaces -> cleaned.
+    _write(
+        tmp_path,
+        "permits__parts.csv",
+        """
+        PERMIT_NUM,STREET_NUM,STREET_NAME,STREET_TYPE,STATUS
+        P1,100,QUEEN,ST,open
+        P2,,,,closed
+        """,
+    )
+    _write_raw(
+        tmp_path,
+        "dinesafe__ws.csv",
+        "_id,Establishment Address,STATUS\n"
+        '1,"  200   King\nSt  E  ",Pass\n',
+    )
+    graph = CivicGraph()
+    summary = load_into_graph(graph, tmp_path)
+    # Only 1 permit (the all-blank-parts row is skipped) and 1 inspection.
+    assert summary == {"permits": 1, "dinesafe": 1}
+    assert len(graph.records_for("100 QUEEN ST", kind="permit")) == 1
+    # Embedded newline + runs of spaces collapsed so the address still resolves.
+    assert len(graph.records_for("200 King St E", kind="inspection")) == 1
+
+
+def test_malformed_coord_and_date_do_not_raise(tmp_path: Path):
+    _write(
+        tmp_path,
+        "dinesafe__badcoords.csv",
+        """
+        _id,Establishment Address,STATUS,Latitude,Longitude,inspectionDate
+        1,300 Yonge St,Fail,not-a-number,,
+        """,
+    )
+    graph = CivicGraph()
+    summary = load_into_graph(graph, tmp_path)
+    assert summary == {"dinesafe": 1}
+    # Bad lat / empty lng -> no coords attached, no crash, no stray date attr.
+    assert graph.addresses(with_coords=True) == []
+    rec = graph.records_for("300 Yonge St", kind="inspection")[0]
+    assert "date" not in rec
+
+
+def test_malformed_file_is_skipped_not_fatal(tmp_path: Path):
+    # A broken JSON file for one key must not abort ingest of a valid CSV for another.
+    (tmp_path / "licences__broken.json").write_text("{ this is not valid json ")
+    _write(
+        tmp_path,
+        "dinesafe__ok.csv",
+        """
+        _id,Establishment Address,STATUS
+        1,400 Spadina Ave,Pass
+        """,
+    )
+    graph = CivicGraph()
+    summary = load_into_graph(graph, tmp_path)
+    # Broken licences file skipped; the valid dinesafe file still loaded.
+    assert summary == {"dinesafe": 1}
+
+
+@pytest.mark.skipif(
+    not (_DEMO_DATA / "dinesafe__downtown.csv").exists(),
+    reason="demo_data/ slice not present (offline CI without the real slice)",
+)
+def test_demo_data_counts_are_stable():
+    # Regression guard: risk scores depend on these exact ingest counts. If a
+    # heuristic change shifts them, this fails loudly before it hits the demo.
+    graph = CivicGraph()
+    summary = load_into_graph(graph, _DEMO_DATA)
+    assert summary == {"permits": 192, "dinesafe": 250, "licences": 105}
