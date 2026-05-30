@@ -31,6 +31,8 @@ venv/
 
 # Node (in case agentic-flow/tooling gets linked locally)
 node_modules/
+package.json
+package-lock.json
 
 # Downloaded open-data files (fetched via scripts/download_data.py)
 data/raw/

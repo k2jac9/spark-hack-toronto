@@ -12,6 +12,7 @@ and the server still boots, so the API is safe to run offline.
 """
 from __future__ import annotations
 
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..agents.digest import city_digest
+from ..agents.llm import interactive_llm
 from ..agents.supervisor import Supervisor
 from ..config import settings
 from ..graph.builder import CivicGraph
@@ -30,9 +32,21 @@ _graph = CivicGraph()
 _supervisor = Supervisor(_graph)
 
 
+def _prewarm_model() -> None:
+    """Best-effort: load the interactive model into memory at boot so the first
+    real /analyze isn't paying the ~5s cold-load on the GX10. Silently no-ops when
+    the endpoint/model is absent (CI, offline) — never blocks or fails startup."""
+    try:
+        interactive_llm().chat("Reply with OK.", "OK", temperature=0.0)
+    except Exception:
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.load_summary = load_into_graph(_graph, settings.data_dir)
+    if settings.llm_prewarm:
+        threading.Thread(target=_prewarm_model, daemon=True).start()
     yield
 
 

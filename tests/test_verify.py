@@ -3,6 +3,7 @@ import json
 
 from civic_analyst.agents.subagents import Finding, RiskNarratorAgent
 from civic_analyst.agents.verify import (
+    EVIDENCE_CAP,
     deterministic_claims,
     evidence_index,
     resolve_claims,
@@ -115,3 +116,25 @@ def test_recommendation_is_conditional_on_risk():
     tagged, _, id_map = evidence_index(clean)
     rec = deterministic_claims("nowhere", clean, tagged, id_map)[-1]
     assert "no action required" in rec["claim"].lower() and rec["source"] is None
+
+
+def test_licence_surfaces_despite_cap_as_nonrisk_context():
+    # A fused address (hero pin 500 Bloor) links a 3rd dataset — business licences.
+    # Even when permits alone fill the evidence cap, the licence must still surface
+    # (no dataset silently hidden) and produce a neutral, click-to-verify context
+    # claim that carries NO risk weight.
+    recs = [{"id": f"p{i}", "kind": "permit", "dataset": "permits", "status": "open"}
+            for i in range(EVIDENCE_CAP)]
+    recs.append({"id": "l1", "kind": "licence", "dataset": "licences"})
+    findings = [Finding("retrieval", f"{len(recs)} linked records.", recs, 0.0),
+                Finding("compliance", f"{EVIDENCE_CAP} open permit(s); 0 adverse.", [], 0.0)]
+    tagged, tag_map, id_map = evidence_index(findings)
+    # The licence (last record, past the cap by raw order) survives via per-kind coverage.
+    assert any(t["kind"] == "licence" for t in tagged), "licence dataset hidden by cap"
+    assert id_map.get("l1") is not None
+    assert tag_map[id_map["l1"]]["dataset"] == "Business Licences & Permits"
+    # …and it shows up as a neutral, source-backed claim — not a risk number.
+    claims = deterministic_claims("500 Bloor St W", findings, tagged, id_map)
+    lic = [c for c in claims if "licence" in c["claim"].lower()]
+    assert lic and lic[0]["source"] is not None
+    assert "not a risk signal" in lic[0]["claim"].lower()
