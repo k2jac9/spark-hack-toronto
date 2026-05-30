@@ -46,7 +46,8 @@ _READY_JS = """() => {
 }"""
 
 
-def shoot(url: str, out: str, settle_ms: int = 2500, timeout_ms: int = 30000) -> None:
+def shoot(url: str, out: str, settle_ms: int = 2500, timeout_ms: int = 30000,
+          eval_js: str | None = None) -> None:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=_LAUNCH_ARGS)
         page = browser.new_page(viewport={"width": 1500, "height": 1000})
@@ -60,17 +61,22 @@ def shoot(url: str, out: str, settle_ms: int = 2500, timeout_ms: int = 30000) ->
             page.wait_for_function(_READY_JS, timeout=timeout_ms)
         except Exception:
             print("warn: map-ready probe timed out; capturing current frame", file=sys.stderr)
-        page.wait_for_timeout(settle_ms)  # final tile paint
+        if eval_js:
+            # Drive page state before capture (e.g. enter presentation mode + select an
+            # address). Pass an async IIFE to await app promises; the settle covers fly-to.
+            page.evaluate(eval_js)
+        page.wait_for_timeout(settle_ms)  # final tile paint (and any fly-to/idle render)
         page.screenshot(path=out)
         browser.close()
 
 
 def main() -> int:
     if len(sys.argv) < 3:
-        print("usage: screenshot_map.py <url> <out.png> [settle_ms]", file=sys.stderr)
+        print("usage: screenshot_map.py <url> <out.png> [settle_ms] [eval_js]", file=sys.stderr)
         return 2
     settle = int(sys.argv[3]) if len(sys.argv) > 3 else 2500
-    shoot(sys.argv[1], sys.argv[2], settle_ms=settle)
+    eval_js = sys.argv[4] if len(sys.argv) > 4 else None
+    shoot(sys.argv[1], sys.argv[2], settle_ms=settle, eval_js=eval_js)
     print(f"wrote {sys.argv[2]}")
     return 0
 

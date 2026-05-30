@@ -520,6 +520,17 @@
       ring.forEach((c) => { x += c[0]; y += c[1]; n++; });
       return n ? [x / n, y / n] : null;
     };
+    // A small circular footprint (metres radius) at a point — the synthetic fallback
+    // the focus highlight extrudes when the sparse offline basemap has no real footprint
+    // at an address, so EVERY selection lights up, not just the few that sit on a footprint.
+    const discPolygon = (lng, lat, m) => {
+      const dLat = m / 111111, dLng = m / (111111 * Math.cos(lat * Math.PI / 180)), ring = [];
+      for (let i = 0; i <= 24; i++) {
+        const a = (i / 24) * 2 * Math.PI;
+        ring.push([lng + dLng * Math.cos(a), lat + dLat * Math.sin(a)]);
+      }
+      return { type: 'Polygon', coordinates: [ring] };
+    };
     // Order matters: the licence dataset name also contains "Permits", so test it first.
     const shortDataset = (n) => /licen[cs]e/i.test(n) ? 'Licences'
       : /dinesafe/i.test(n) ? 'DineSafe' : /permit/i.test(n) ? 'Permits' : n;
@@ -587,7 +598,10 @@
         }
         if (map.getLayer('focusbld')) map.removeLayer('focusbld');
         if (map.getSource('focusbld')) map.removeSource('focusbld');
-        if (!target) return;
+        // No real footprint nearby (the offline basemap is sparse) → anchor a synthetic
+        // disc at the pin so the highlight is consistent across every address, not just
+        // the handful that happen to sit on a tagged footprint.
+        if (!target) target = { properties: { height: 20 }, geometry: discPolygon(row.lng, row.lat, 13) };
         const col = { high: '#ff3b6b', medium: '#ffb020', low: '#ffe34d', none: '#2bff88' }[worstBand(row)];
         map.addSource('focusbld', { type: 'geojson',
           data: { type: 'Feature', properties: target.properties, geometry: target.geometry } });
