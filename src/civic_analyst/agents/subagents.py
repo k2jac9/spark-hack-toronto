@@ -69,14 +69,20 @@ class ComplianceAgent:
         permits = graph.records_for(address, kind="permit")
         inspections = graph.records_for(address, kind="inspection")
         open_permits = [p for p in permits if str(p.get("status", "")).lower() != "closed"]
-        adverse = [i for i in inspections if classify_inspection(i.get("outcome")) != "pass"]
-        minor = [i for i in adverse if classify_inspection(i.get("outcome")) == "minor"]
-        severe = [i for i in adverse if classify_inspection(i.get("outcome")) == "severe"]
+        flagged = [i for i in inspections if classify_inspection(i.get("outcome")) != "pass"]
+        minor = [i for i in flagged if classify_inspection(i.get("outcome")) == "minor"]
+        severe = [i for i in flagged if classify_inspection(i.get("outcome")) == "severe"]
+        # Prose honesty (#3a): "adverse" names SEVERE outcomes only (fail/closed/
+        # conviction); a Conditional Pass is a minor follow-up, reported as such. The
+        # graded score is unchanged — minor still weighs 0.8 vs severe 2.0.
+        parts = [f"{len(open_permits)} open permit(s)"]
+        if minor:
+            parts.append(f"{len(minor)} Conditional Pass visit(s)")
+        parts.append(f"{len(severe)} adverse inspection(s)")
         return Finding(
             agent=self.name,
-            summary=(f"{len(open_permits)} open permit(s); "
-                     f"{len(adverse)} adverse inspection(s)."),
-            evidence=open_permits + adverse,
+            summary="; ".join(parts) + ".",
+            evidence=open_permits + flagged,
             score=graded_score(len(open_permits), len(minor), len(severe)),
         )
 

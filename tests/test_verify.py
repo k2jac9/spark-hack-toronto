@@ -109,6 +109,34 @@ def test_deterministic_claims_link_to_distinct_sources():
     assert resolved[0]["source"]["ref"] == "i1"
 
 
+def test_minor_inspection_reported_as_conditional_pass_not_adverse():
+    # Prose honesty (#3a): a Conditional Pass is a minor follow-up, reported as
+    # "Conditional Pass", never "adverse" (which is reserved for severe outcomes).
+    recs = [{"id": "i1", "kind": "inspection", "dataset": "dinesafe",
+             "outcome": "Conditional Pass", "deficiency_count": 9}]
+    findings = [Finding("retrieval", "1 linked record.", recs, 0.0),
+                Finding("compliance", "0 open permit(s); 1 Conditional Pass visit(s); "
+                        "0 adverse inspection(s).", [], 0.0)]
+    tagged, _, id_map = evidence_index(findings)
+    claims = deterministic_claims("12 Main St", findings, tagged, id_map)
+    text = " ".join(c["claim"] for c in claims)
+    assert "conditional pass" in text.lower()
+    # The minor visit is NOT called "adverse" anywhere.
+    assert "adverse" not in text.lower()
+    # Collapsed visit surfaces its deficiency count for display (1 visit, 9 deficiencies).
+    assert "9 deficiencies" in text
+
+
+def test_severe_inspection_still_called_adverse():
+    recs = [{"id": "i1", "kind": "inspection", "dataset": "dinesafe", "outcome": "Fail"}]
+    findings = [Finding("retrieval", "1 linked record.", recs, 0.0),
+                Finding("compliance", "0 open permit(s); 1 adverse inspection(s).", [], 0.0)]
+    tagged, _, id_map = evidence_index(findings)
+    text = " ".join(c["claim"] for c in
+                    deterministic_claims("x", findings, tagged, id_map))
+    assert "adverse" in text.lower()
+
+
 def test_recommendation_is_conditional_on_risk():
     # No issues -> explicit "no action", with no fabricated source (#7).
     clean = [Finding("retrieval", "0 linked records.", [], 0.0),

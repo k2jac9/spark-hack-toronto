@@ -14,9 +14,19 @@ from typing import Any
 
 import pandas as pd
 
+from ..agents.verify import classify_inspection
 from ..config import settings
-from ..graph.builder import CivicGraph
+from ..graph.builder import CivicGraph, normalize_address
 from .datasets import REGISTRY
+
+# Real enforcement outcomes (OutcomeDesc) that mark a visit SEVERE even when its
+# inspectionStatus is Pass/Conditional Pass — these are court/closure actions, not
+# routine line-items, so they should dominate the routine status signal (#3b).
+_CONVICTION_KEYWORDS = ("conviction", "closed", "closure", "order", "suspend", "fined")
+
+# Severity rank for collapsing a multi-row visit to its worst line item.
+_SEVERITY_RANK = {"pass": 0, "minor": 1, "severe": 2}
+_RANK_TO_OUTCOME = {0: "Pass", 1: "Conditional Pass", 2: "Fail"}
 
 # Registry key -> graph node kind.
 KIND_BY_KEY: dict[str, str] = {
@@ -84,8 +94,16 @@ def _resolve_plan(columns: list[str], kind: str) -> dict[str, Any]:
         "id_col": id_col,
         "state_attr": state_attr,
         "state_col": _find_col(columns, state_kws),
-        # A date column makes each evidence row traceable to a real, dated record (#5).
+        # A date column makes each evidence row traceable to a real, dated record (#5)
+        # AND lets us collapse same-day line-items into one visit (#3 de-dup).
         "date_col": _find_col(columns, ("date", "issued", "inspection_date", "_dt")),
+        # Real enforcement outcome (DineSafe OutcomeDesc), used additively to escalate
+        # a visit to SEVERE on a conviction/order/closure keyword (#3b).
+        "outcome_desc_col": _find_col(columns, ("outcomedesc", "outcome desc")),
+        # Establishment id — the de-dup key for collapsing ONE premises' deficiency
+        # line-items (estId+date) WITHOUT fusing distinct vendors that share a building
+        # (e.g. 7 food stands at Rogers Centre, same address+date) (#3).
+        "est_id_col": _find_col(columns, ("estid", "establishment id", "establishmentid")),
         "lat_col": _find_col(columns, ("latitude", "lat")),
         "lng_col": _find_col(columns, ("longitude", "long", "lng")),
     }
@@ -127,12 +145,25 @@ def _read_rows(path: Path) -> tuple[list[str], list[dict[str, Any]]]:
     return list(df.columns), df.to_dict("records")
 
 
+def _has_conviction(text: Any) -> bool:
+    """True if an OutcomeDesc names a court/closure/order enforcement action (#3b)."""
+    low = str(text or "").lower()
+    return any(kw in low for kw in _CONVICTION_KEYWORDS)
+
+
 def load_file(graph: CivicGraph, key: str, path: Path) -> int:
     kind = KIND_BY_KEY.get(key, key)
     columns, rows = _read_rows(path)
     if not rows:
         return 0
     plan = _resolve_plan(columns, kind)
+    # Inspection visits are line-itemised in DineSafe (one CSV row per deficiency),
+    # so a single dated visit shows up as N rows. When a usable date column exists,
+    # collapse rows of ONE visit into ONE record (#3) keyed by (estId, date) — or
+    # (address, date) when there's no estId; with no date column we fall back to
+    # per-row so other feeds/fixtures are unaffected.
+    if kind == "inspection" and plan["date_col"]:
+        return _load_inspection_visits(graph, key, kind, plan, rows)
     added = 0
     for i, row in enumerate(rows):
         address = _address(row, plan)
@@ -150,6 +181,64 @@ def load_file(graph: CivicGraph, key: str, path: Path) -> int:
                          lng=_coord(row, plan["lng_col"]), **attrs)
         added += 1
     return added
+
+
+def _load_inspection_visits(graph: CivicGraph, key: str, kind: str,
+                            plan: dict[str, Any], rows: list[dict[str, Any]]) -> int:
+    """Group inspection rows into one visit each, keyed by (estId, date) — falling
+    back to (normalized address, date) when there is no establishment-id column.
+
+    Keying on estId collapses ONE premises' deficiency line-items while keeping
+    DISTINCT establishments that share a building (and date) separate — e.g. the
+    seven food vendors at 1 Blue Jays Way (Rogers Centre) inspected the same day are
+    seven visits, not one. The collapsed record keeps the WORST severity across its
+    line-items (so the score sees one visit, not N deficiencies), records
+    `deficiency_count` for display, and is escalated to SEVERE if any line-item's
+    OutcomeDesc names a conviction/order/closure (#3b — additive on top of
+    inspectionStatus, which stays the primary signal)."""
+    est_col = plan["est_id_col"]
+    # Preserve first-seen order so evidence/ids stay stable across loads.
+    visits: dict[tuple[str, str], dict[str, Any]] = {}
+    order: list[tuple[str, str]] = []
+    for i, row in enumerate(rows):
+        address = _address(row, plan)
+        if not address:
+            continue
+        date_val = str(row.get(plan["date_col"], "")).strip()
+        # estId, when present, scopes the group to a single establishment so distinct
+        # vendors at a shared address+date never fuse; else fall back to the address.
+        est_val = str(row.get(est_col, "")).strip() if est_col else ""
+        gkey = ((f"est:{est_val}" if est_val else normalize_address(address)), date_val)
+        outcome = row.get(plan["state_col"]) if plan["state_col"] else None
+        sev = classify_inspection(outcome)
+        if plan["outcome_desc_col"] and _has_conviction(row.get(plan["outcome_desc_col"])):
+            sev = "severe"
+            outcome = "Conviction"
+        if gkey not in visits:
+            order.append(gkey)
+            record_id = (str(row.get(plan["id_col"])) if plan["id_col"] else f"{key}-{i}")
+            visits[gkey] = {
+                "address": address, "record_id": record_id, "date": date_val,
+                "rank": _SEVERITY_RANK[sev], "outcome": outcome,
+                "deficiency_count": 1,
+                "lat": _coord(row, plan["lat_col"]), "lng": _coord(row, plan["lng_col"]),
+            }
+            continue
+        v = visits[gkey]
+        v["deficiency_count"] += 1
+        if _SEVERITY_RANK[sev] > v["rank"]:
+            v["rank"], v["outcome"] = _SEVERITY_RANK[sev], outcome
+        if v["lat"] is None:
+            v["lat"], v["lng"] = _coord(row, plan["lat_col"]), _coord(row, plan["lng_col"])
+    for gkey in order:
+        v = visits[gkey]
+        attrs: dict[str, Any] = {"dataset": key, "deficiency_count": v["deficiency_count"]}
+        if v["outcome"] is not None:
+            attrs[plan["state_attr"]] = v["outcome"]
+        if v["date"]:
+            attrs["date"] = v["date"]
+        graph.add_record(kind, v["record_id"], v["address"], lat=v["lat"], lng=v["lng"], **attrs)
+    return len(order)
 
 
 def _coord(row: dict[str, Any], col: str | None) -> float | None:
