@@ -90,12 +90,29 @@ class RiskNarratorAgent:
 
     name = "risk_narrator"
     SYSTEM = (
-        "You are a municipal risk analyst. You are given Evidence items, each with a "
-        "tag (E1, E2, …), and deterministic Findings. Output ONLY a JSON array of 2-4 "
-        "objects, each exactly {\"claim\": \"<one sentence>\", \"source\": \"<one "
-        "evidence tag, e.g. E1>\"}. Every claim must be supported by the cited "
-        "evidence item. Use only numbers that appear in the Findings; never invent "
-        "numbers, sources, or tags. Output the JSON array and nothing else."
+        "You are a municipal risk analyst briefing a city inspector. You are given "
+        "Evidence items — each with a tag (E1, E2, …), its source dataset, record type, "
+        "and status/outcome — plus deterministic Findings. Output ONLY a JSON array of "
+        "2-4 objects, each exactly {\"claim\": \"<one sentence>\", \"source\": \"<one "
+        "evidence tag, e.g. E1>\"}.\n"
+        "Write each claim as a clear, plain-language sentence an inspector can act on: "
+        "name the dataset or record type behind it and what it implies on the ground "
+        "(an open building permit means active construction to verify on site; a DineSafe "
+        "Conditional Pass means a food-safety re-check is due). Prefer concrete, useful "
+        "wording over bare counts like 'X are present'. Cite the one evidence tag that "
+        "best backs the claim.\n"
+        "Style example (numbers/tags are illustrative — use the real ones): "
+        "{\"claim\": \"8 open building permits indicate active construction here that "
+        "should be checked against approved scope.\", \"source\": \"E4\"}, "
+        "{\"claim\": \"A DineSafe Conditional Pass means this food premises has an "
+        "unresolved health item flagged for follow-up.\", \"source\": \"E2\"}.\n"
+        "Hard rules (a claim that breaks any of these is discarded): every claim must be "
+        "supported by its cited evidence item, and the cited tag's record type must match "
+        "what the claim is about (cite a permit row for a permit claim, an inspection row "
+        "for an inspection claim); cite exactly one real tag from the list; and use ONLY "
+        "numbers that literally appear in the Findings — never invent, estimate, total, "
+        "or round numbers, and never invent sources, tags, dates, or dataset names. "
+        "Output the JSON array and nothing else."
     )
 
     def __init__(self, llm: LocalLLM | None = None) -> None:
@@ -119,11 +136,17 @@ class RiskNarratorAgent:
         tagged, tag_map, id_to_tag = evidence_index(findings)
         valid_tags = {t["tag"] for t in tagged}
         ev = "\n".join(
-            f"{t['tag']} [{t['dataset']}] {t['kind']}" + (f": {t['detail']}" if t["detail"] else "")
+            f"{t['tag']}: {t['dataset']} — {t['kind']} record"
+            + (f", status/outcome '{t['detail']}'" if t["detail"] else "")
+            + (f" ({t['date']})" if t.get("date") else "")
             for t in tagged
         ) or "(no records)"
         bullets = "\n".join(f"- {f.summary}" for f in findings)
-        user = f"Address: {address}\nEvidence:\n{ev}\nFindings:\n{bullets}"
+        user = (
+            f"Address: {address}\n"
+            f"Evidence (cite one tag per claim; these are the only valid sources):\n{ev}\n"
+            f"Findings (the ONLY numbers you may use):\n{bullets}"
+        )
         try:
             parsed = self._parse_json_array(self.llm.chat(self.SYSTEM, user, temperature=0.0))
         except Exception:  # offline / malformed output
