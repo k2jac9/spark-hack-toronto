@@ -29,9 +29,9 @@ FINDINGS = [
              "outcome": "Conditional Pass"},
             {"id": "l1", "kind": "licence", "dataset": "licences"},
         ],
-        0.0,
     ),
-    Finding("compliance", "1 open permit(s); 1 adverse inspection(s).", [], 0.5),
+    Finding("compliance", "1 open permit(s); 1 adverse inspection(s).", [],
+            risk_safety=0.362, risk_activity=0.058),
 ]
 TAGGED, TAG_MAP, ID_TO_TAG = evidence_index(FINDINGS)
 VALID = {t["tag"] for t in TAGGED}

@@ -19,9 +19,11 @@ def test_real_slice_loads_in_bbox_with_some_risk():
     assert all(
         43.62 <= a["lat"] <= 43.69 and -79.43 <= a["lng"] <= -79.34 for a in addrs
     )
-    # At least one at-risk address so the map shows a non-green pin.
+    # At least one at-risk address (on EITHER axis) so the map shows a non-green pin.
     sup = Supervisor(g)
-    assert any(sup.score_only(a["label"]) > 0 for a in addrs)
+    assert any(
+        max(sup.score_only(a["label"]).values()) > 0 for a in addrs
+    )
 
 
 def test_real_cross_dataset_fusion():

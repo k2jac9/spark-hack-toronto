@@ -36,9 +36,10 @@ def _reset_cache() -> None:
 
 def test_real_digest_is_cached_after_first_call():
     _reset_cache()
+    # Two-index ranked rows (ADR 0014): each carries an independent safety + activity.
     ranked = [
-        {"label": "100 Queen St W", "risk_score": 0.826},
-        {"label": "200 Bay St", "risk_score": 0.4},
+        {"label": "100 Queen St W", "risk_safety": 0.593, "risk_activity": 0.113},
+        {"label": "200 Bay St", "risk_safety": 0.0, "risk_activity": 0.4},
     ]
     llm = _CountingLLM()
 
@@ -56,18 +57,18 @@ def test_real_digest_is_cached_after_first_call():
 
 def test_different_ranking_recomputes():
     _reset_cache()
-    base = [{"label": "100 Queen St W", "risk_score": 0.826}]
-    changed = [{"label": "100 Queen St W", "risk_score": 0.5}]
+    base = [{"label": "100 Queen St W", "risk_safety": 0.593, "risk_activity": 0.113}]
+    changed = [{"label": "100 Queen St W", "risk_safety": 0.3, "risk_activity": 0.113}]
     llm = _CountingLLM()
 
     city_digest(base, llm=llm)
-    city_digest(changed, llm=llm)  # different score → different key → recompute
+    city_digest(changed, llm=llm)  # different safety score → different key → recompute
     assert llm.calls == 2
 
 
 def test_fallback_is_never_cached():
     _reset_cache()
-    ranked = [{"label": "100 Queen St W", "risk_score": 0.826}]
+    ranked = [{"label": "100 Queen St W", "risk_safety": 0.593, "risk_activity": 0.113}]
     boom = _BoomLLM()
 
     out = city_digest(ranked, llm=boom)

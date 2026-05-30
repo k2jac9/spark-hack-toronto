@@ -31,9 +31,12 @@ def test_demo_address_is_high_risk_and_clean_address_is_low():
     hot = sup.analyze("100 Queen St W")   # 2 open permits + 2 failed inspection visits
     cold = sup.analyze("55 John St")      # closed permit + passing inspection
 
-    # Graded score (#6): 2 open (0.5) + 2 severe (2.0) -> 1-exp(-0.35*5) = 0.826, "high".
-    assert hot.risk_score == 0.826 and hot.risk_band == "high"
-    assert cold.risk_score == 0.0 and cold.risk_band == "none"
+    # Two-index model (ADR 0014): construction activity and food safety are SEPARATE.
+    # Activity = 1-exp(-0.06*2) = 0.113 (low); Safety = 1-exp(-0.45*2) = 0.593 (medium).
+    assert hot.risk_activity == 0.113 and hot.band_activity == "low"
+    assert hot.risk_safety == 0.593 and hot.band_safety == "medium"
+    assert cold.risk_safety == 0.0 and cold.band_safety == "none"
+    assert cold.risk_activity == 0.0 and cold.band_activity == "none"
     assert hot.found and hot.matched_address
     # 2 permits + 2 inspections + 1 request + 1 licence all link to the hot address
     assert graph.records_for("100 Queen St W") and len(graph.records_for("100 Queen St W")) == 6

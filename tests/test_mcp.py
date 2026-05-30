@@ -20,10 +20,15 @@ def test_tools_operate_on_loaded_graph():
 
     ranked = mcp_server.top_risk(limit=3)
     assert normalize_address(ranked[0]["address"]) == normalize_address("100 Queen St W")
-    assert ranked[0]["risk_score"] == 0.826
+    # Two-index model (ADR 0014): both indices + bands, ranked by the hotter axis.
+    assert ranked[0]["risk_safety"] == 0.593 and ranked[0]["band_safety"] == "medium"
+    assert ranked[0]["risk_activity"] == 0.113 and ranked[0]["band_activity"] == "low"
+    assert "risk_score" not in ranked[0]
 
     report = mcp_server.analyze_address("100 Queen St W")
-    assert report["risk_score"] == 0.826 and report["found"] is True
+    assert report["risk_safety"] == 0.593 and report["risk_activity"] == 0.113
+    assert report["found"] is True
+    assert "risk_score" not in report
 
 
 def test_build_server_registers_expected_tools():

@@ -12,11 +12,31 @@ exposing `.summary` (str) and `.evidence` (list[dict]).
 """
 from __future__ import annotations
 
+import math
 import re
 
 from ..ingest.datasets import REGISTRY
 
 EVIDENCE_CAP = 12  # max evidence rows surfaced per analysis (disclosed, never silent)
+
+# Two-index scoring (ADR 0014). Construction activity and food safety are SEPARATE
+# axes — a busy permit address and a failed-inspection address are different problems,
+# so we never blend them into one number. Each is a smooth saturating function of its
+# own count, then read through the shared `risk_band` thresholds independently.
+_ACTIVITY_K = 0.06  # open permits → activity index
+_SAFETY_K = 0.45    # adverse inspection VISITS → safety index
+
+
+def activity_index(open_permits: int) -> float:
+    """Construction-activity index from the count of open building permits."""
+    return round(1.0 - math.exp(-_ACTIVITY_K * max(0, open_permits)), 3)
+
+
+def safety_index(adverse_visits: int) -> float:
+    """Food-safety index from the count of NON-pass inspection visits. Severity
+    (minor vs severe) is deliberately NOT in this score — it lives in the prose;
+    severity-weighting is a documented future refinement (ADR 0014)."""
+    return round(1.0 - math.exp(-_SAFETY_K * max(0, adverse_visits)), 3)
 
 
 def classify_inspection(outcome) -> str:
@@ -38,6 +58,47 @@ def risk_band(score: float) -> str:
     if score < 0.67:
         return "medium"
     return "high"
+
+
+# Per-axis qualitative words for the two-line narrative (ADR 0014 §8). The bands map
+# to plain words so a non-color reader gets the gist; the two axes use their own
+# vocabulary (safety reads clear/moderate/elevated, activity low/moderate/elevated).
+_SAFETY_WORD = {"none": "clear", "low": "moderate", "medium": "moderate", "high": "elevated"}
+_ACTIVITY_WORD = {"none": "low", "low": "low", "medium": "moderate", "high": "elevated"}
+
+
+def _plural(n: int, noun: str) -> str:
+    return f"{n} {noun}" + ("" if n == 1 else "s")
+
+
+def two_line_narrative(adverse_visits: int, open_permits: int) -> str:
+    """Deterministic two-line risk read (ADR 0014 §8): one Safety line, one
+    Construction line. Every figure traces straight to the visit/permit counts —
+    no LLM, so it can never hallucinate a number."""
+    sb = _SAFETY_WORD[risk_band(safety_index(adverse_visits))]
+    ab = _ACTIVITY_WORD[risk_band(activity_index(open_permits))]
+    safety = (f"Food safety — {sb}. "
+              + _plural(adverse_visits, "inspection visit") + " of concern.")
+    construction = (f"Construction activity — {ab}. "
+                    + _plural(open_permits, "open permit") + ".")
+    return safety + " " + construction
+
+
+def compliance_counts(findings) -> tuple[int, int]:
+    """(adverse_visits, open_permits) across a report's findings — the two raw
+    counts that drive both indices and the two-line narrative. Reads the same
+    de-duped evidence records the indices are computed from, so the prose and the
+    scores can never disagree."""
+    recs = unique_records(findings).values()
+    open_permits = sum(
+        1 for r in recs
+        if r.get("kind") == "permit" and str(r.get("status", "")).lower() != "closed"
+    )
+    adverse_visits = sum(
+        1 for r in recs
+        if r.get("kind") == "inspection" and classify_inspection(r.get("outcome")) != "pass"
+    )
+    return adverse_visits, open_permits
 
 
 def _ref(rec: dict) -> str:

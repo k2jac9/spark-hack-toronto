@@ -73,7 +73,8 @@ def _reset_cache() -> None:
 
 def test_prompt_lines_never_show_the_stray_none_token():
     _reset_cache()
-    ranked = [{"label": "142 Parliament St None M5A 2Z1", "risk_score": 0.7}]
+    ranked = [{"label": "142 Parliament St None M5A 2Z1",
+               "risk_safety": 0.7, "risk_activity": 0.2}]
     llm = _CapturingLLM()
     city_digest(ranked, llm=llm)
     assert "None" not in llm.user
@@ -82,7 +83,8 @@ def test_prompt_lines_never_show_the_stray_none_token():
 
 def test_fallback_line_never_shows_the_stray_none_token():
     _reset_cache()
-    ranked = [{"label": "142 Parliament St None M5A 2Z1", "risk_score": 0.7}]
+    ranked = [{"label": "142 Parliament St None M5A 2Z1",
+               "risk_safety": 0.7, "risk_activity": 0.2}]
     out = city_digest(ranked, llm=_BoomLLM())
     assert "None M5A" not in out
     assert "142 Parliament St M5A 2Z1" in out

@@ -8,32 +8,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import json
-import math
 
 from ..graph.builder import CivicGraph
 from .llm import LocalLLM, interactive_llm
 from .verify import (
+    activity_index,
     classify_inspection,
     deterministic_claims,
     evidence_index,
     narrative_text,
     resolve_claims,
+    safety_index,
     verify_claims,
 )
-
-# Severity weights for the graded risk score (#6): an open permit is a mild signal,
-# a conditional-pass inspection moderate, a failed/closed inspection serious. The
-# score is a smooth saturating function of total weight, so 1 vs 12 issues differ.
-_W_OPEN_PERMIT = 0.5
-_W_MINOR_INSPECTION = 0.8
-_W_SEVERE_INSPECTION = 2.0
-_RISK_K = 0.35
-
-
-def graded_score(open_permits: int, minor: int, severe: int) -> float:
-    weight = (_W_OPEN_PERMIT * open_permits + _W_MINOR_INSPECTION * minor
-              + _W_SEVERE_INSPECTION * severe)
-    return round(1.0 - math.exp(-_RISK_K * weight), 3)
 
 
 @dataclass
@@ -41,7 +28,12 @@ class Finding:
     agent: str
     summary: str
     evidence: list[dict]
-    score: float  # 0..1 risk contribution
+    # Two independent risk indices (ADR 0014). Construction-permit activity and
+    # food-safety inspections are NEVER summed into one number — they answer
+    # different questions, so each carries its own 0..1 index. Most findings
+    # (e.g. retrieval) contribute 0 to both.
+    risk_safety: float = 0.0
+    risk_activity: float = 0.0
 
 
 class RetrievalAgent:
@@ -55,13 +47,14 @@ class RetrievalAgent:
             agent=self.name,
             summary=f"{len(records)} linked records for {address!r}.",
             evidence=records,
-            score=0.0,
         )
 
 
 class ComplianceAgent:
-    """Flags open building permits and adverse food-safety inspections — kept as two
-    distinct signals (a DineSafe conditional pass is NOT a permit infraction)."""
+    """Computes the two independent risk signals: a construction *activity* index from
+    open building permits and a food-safety index from adverse inspection visits. The
+    two are kept distinct (a DineSafe conditional pass is NOT a permit infraction) and
+    are never blended into one score (ADR 0014)."""
 
     name = "compliance"
 
@@ -69,12 +62,14 @@ class ComplianceAgent:
         permits = graph.records_for(address, kind="permit")
         inspections = graph.records_for(address, kind="inspection")
         open_permits = [p for p in permits if str(p.get("status", "")).lower() != "closed"]
+        # `inspections` are already de-duped to one record per VISIT by the loader
+        # (ADR 0013), so each non-pass visit counts once toward the safety index.
         flagged = [i for i in inspections if classify_inspection(i.get("outcome")) != "pass"]
         minor = [i for i in flagged if classify_inspection(i.get("outcome")) == "minor"]
         severe = [i for i in flagged if classify_inspection(i.get("outcome")) == "severe"]
         # Prose honesty (#3a): "adverse" names SEVERE outcomes only (fail/closed/
-        # conviction); a Conditional Pass is a minor follow-up, reported as such. The
-        # graded score is unchanged — minor still weighs 0.8 vs severe 2.0.
+        # conviction); a Conditional Pass is a minor follow-up, reported as such.
+        # Severity stays in the prose, NOT in the safety index (ADR 0014).
         parts = [f"{len(open_permits)} open permit(s)"]
         if minor:
             parts.append(f"{len(minor)} Conditional Pass visit(s)")
@@ -83,7 +78,8 @@ class ComplianceAgent:
             agent=self.name,
             summary="; ".join(parts) + ".",
             evidence=open_permits + flagged,
-            score=graded_score(len(open_permits), len(minor), len(severe)),
+            risk_safety=safety_index(len(flagged)),
+            risk_activity=activity_index(len(open_permits)),
         )
 
 
