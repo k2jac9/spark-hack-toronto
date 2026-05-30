@@ -159,6 +159,71 @@ def test_malformed_file_is_skipped_not_fatal(tmp_path: Path):
     assert summary == {"dinesafe": 1}
 
 
+def test_inspection_visits_dedup_by_address_and_date(tmp_path: Path):
+    # DineSafe line-items one row per deficiency: 3 same-day rows at one address are
+    # ONE visit; a different date is a second visit. The collapsed visit keeps the
+    # worst severity and exposes deficiency_count for display (#3).
+    _write(
+        tmp_path,
+        "dinesafe__visits.csv",
+        """
+        _id,Establishment Address,inspectionStatus,inspectionDate
+        1,12 Main St,Conditional Pass,2024-01-10
+        2,12 Main St,Pass,2024-01-10
+        3,12 Main St,Conditional Pass,2024-01-10
+        4,12 Main St,Pass,2024-06-01
+        """,
+    )
+    graph = CivicGraph()
+    summary = load_into_graph(graph, tmp_path)
+    assert summary == {"dinesafe": 2}  # 2 visits, not 4 line-items
+    recs = sorted(graph.records_for("12 Main St", kind="inspection"),
+                  key=lambda r: r.get("date"))
+    assert [r["date"] for r in recs] == ["2024-01-10", "2024-06-01"]
+    # First visit: 3 deficiency rows collapsed, worst severity (Conditional) wins.
+    assert recs[0]["deficiency_count"] == 3
+    assert recs[0]["outcome"] == "Conditional Pass"
+    assert recs[1]["deficiency_count"] == 1
+
+
+def test_no_date_column_falls_back_to_per_row(tmp_path: Path):
+    # No usable date column -> do NOT collapse (other fixtures/feeds unaffected).
+    _write(
+        tmp_path,
+        "dinesafe__nodate.csv",
+        """
+        _id,Establishment Address,STATUS
+        1,12 Main St,Fail
+        2,12 Main St,Fail
+        """,
+    )
+    graph = CivicGraph()
+    assert load_into_graph(graph, tmp_path) == {"dinesafe": 2}
+    assert len(graph.records_for("12 Main St", kind="inspection")) == 2
+
+
+def test_conviction_outcome_escalates_visit_to_severe(tmp_path: Path):
+    # A Pass/Conditional visit whose OutcomeDesc names a conviction/order is SEVERE,
+    # additively — the real enforcement signal that was previously invisible (#3b).
+    _write(
+        tmp_path,
+        "dinesafe__conviction.csv",
+        """
+        _id,Establishment Address,inspectionStatus,inspectionDate,OutcomeDesc
+        1,99 King St,Conditional Pass,2024-02-01,Conviction - Fined
+        2,77 Bay St,Conditional Pass,2024-02-01,
+        """,
+    )
+    from civic_analyst.agents.verify import classify_inspection
+
+    graph = CivicGraph()
+    load_into_graph(graph, tmp_path)
+    convicted = graph.records_for("99 King St", kind="inspection")[0]
+    routine = graph.records_for("77 Bay St", kind="inspection")[0]
+    assert classify_inspection(convicted["outcome"]) == "severe"
+    assert classify_inspection(routine["outcome"]) == "minor"  # status stays primary
+
+
 @pytest.mark.skipif(
     not (_DEMO_DATA / "dinesafe__downtown.csv").exists(),
     reason="demo_data/ slice not present (offline CI without the real slice)",
@@ -168,4 +233,7 @@ def test_demo_data_counts_are_stable():
     # heuristic change shifts them, this fails loudly before it hits the demo.
     graph = CivicGraph()
     summary = load_into_graph(graph, _DEMO_DATA)
-    assert summary == {"permits": 192, "dinesafe": 250, "licences": 105}
+    # dinesafe is now de-duped per VISIT (address+date), not per line-item: the 250
+    # raw deficiency rows collapse to 76 distinct visits at the street-address level
+    # the rest of the system joins on (#3 — kills the 250 over-count inflation).
+    assert summary == {"permits": 192, "dinesafe": 76, "licences": 105}

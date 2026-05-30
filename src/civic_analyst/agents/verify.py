@@ -158,17 +158,17 @@ def _recommendation(findings, id_to_tag: dict[str, str]) -> dict:
     recs = unique_records(findings).values()
     open_permits = [r for r in recs
                     if r.get("kind") == "permit" and str(r.get("status", "")).lower() != "closed"]
-    adverse = [r for r in recs
+    flagged = [r for r in recs
                if r.get("kind") == "inspection" and classify_inspection(r.get("outcome")) != "pass"]
-    severe = [r for r in adverse if classify_inspection(r.get("outcome")) == "severe"]
+    severe = [r for r in flagged if classify_inspection(r.get("outcome")) == "severe"]
     if severe:
         return {"claim": "Recommended action: an adverse food-safety inspection is on record"
                 " — prioritize an on-site re-inspection.",
                 "source": id_to_tag.get(severe[0].get("id"))}
-    if open_permits or adverse:
+    if open_permits or flagged:
         return {"claim": "Recommended action: schedule an on-site inspection to verify"
                 " compliance.",
-                "source": _first_tag(open_permits + adverse, id_to_tag)}
+                "source": _first_tag(open_permits + flagged, id_to_tag)}
     return {"claim": "No open permits or adverse inspections on record — no action required.",
             "source": None}
 
@@ -181,8 +181,9 @@ def deterministic_claims(address: str, findings, tagged: list[dict],
     recs = unique_records(findings)
     open_permits = [r for r in recs.values()
                     if r.get("kind") == "permit" and str(r.get("status", "")).lower() != "closed"]
-    adverse = [r for r in recs.values()
-               if r.get("kind") == "inspection" and classify_inspection(r.get("outcome")) != "pass"]
+    inspections = [r for r in recs.values() if r.get("kind") == "inspection"]
+    minor = [r for r in inspections if classify_inspection(r.get("outcome")) == "minor"]
+    severe = [r for r in inspections if classify_inspection(r.get("outcome")) == "severe"]
     licences = [r for r in recs.values() if r.get("kind") == "licence"]
 
     claims = [{"claim": f"{len(recs)} linked record(s) for {address!r}.",
@@ -190,9 +191,17 @@ def deterministic_claims(address: str, findings, tagged: list[dict],
     if open_permits:
         claims.append({"claim": f"{len(open_permits)} open building permit(s).",
                        "source": id_to_tag.get(open_permits[0].get("id"))})
-    if adverse:
-        claims.append({"claim": f"{len(adverse)} adverse food-safety inspection(s).",
-                       "source": id_to_tag.get(adverse[0].get("id"))})
+    # Prose honesty (#3a): a Conditional Pass is a minor follow-up, not "adverse";
+    # surface deficiency_count so a collapsed visit reads "1 visit (N deficiencies)".
+    if minor:
+        defs = sum(int(r.get("deficiency_count", 1) or 1) for r in minor)
+        suffix = f" ({defs} deficiencies)" if defs > len(minor) else ""
+        claims.append({"claim": f"{len(minor)} Conditional Pass inspection visit(s)"
+                       f"{suffix} — food-safety re-check due.",
+                       "source": id_to_tag.get(minor[0].get("id"))})
+    if severe:
+        claims.append({"claim": f"{len(severe)} adverse food-safety inspection(s).",
+                       "source": id_to_tag.get(severe[0].get("id"))})
     # Licences are identity context, not a risk signal (no score weight) — surfaced
     # so a fused address visibly cites all three datasets, with a click-to-verify tag.
     if licences:

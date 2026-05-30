@@ -28,7 +28,7 @@ def test_demo_address_is_high_risk_and_clean_address_is_low():
     load_into_graph(graph, FIXTURES)
     sup = Supervisor(graph, narrator=_StubNarrator())
 
-    hot = sup.analyze("100 Queen St W")   # 2 open permits + 2 failed inspections
+    hot = sup.analyze("100 Queen St W")   # 2 open permits + 2 failed inspection visits
     cold = sup.analyze("55 John St")      # closed permit + passing inspection
 
     # Graded score (#6): 2 open (0.5) + 2 severe (2.0) -> 1-exp(-0.35*5) = 0.826, "high".
