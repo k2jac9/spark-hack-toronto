@@ -11,11 +11,14 @@ Access path is **Tailscale** (encrypted mesh VPN, no router/port-forward config)
 
 SSH is **never** exposed to the public internet; Ollama stays bound to `localhost`.
 
-> Values filled in once the box is on the tailnet (run `tailscale status` on the box):
-> - Tailnet name: `<your-tailnet>.ts.net`  (e.g. `tail1234.ts.net`)
-> - Box tailnet IP: `100.x.y.z`
-> - MagicDNS name: `gx10-4428` (short) / `gx10-4428.<your-tailnet>.ts.net` (full)
-> - Public demo URL (Funnel): `https://gx10-4428.<your-tailnet>.ts.net`
+> **Live values** (this tailnet — none of these are secrets; the Funnel URL is meant to be public,
+> the `100.x` IP only resolves inside the tailnet):
+> - Tailnet name: `taila9fe06.ts.net`
+> - Box tailnet IP: `100.73.241.60`
+> - MagicDNS name: `gx10-4428` (short) / `gx10-4428.taila9fe06.ts.net` (full)
+> - **Public demo URL (Funnel): https://gx10-4428.taila9fe06.ts.net** ← share with judges
+>
+> Turn the public URL **off** when the demo's done: `tailscale funnel --https=443 off`.
 
 Box identity: user **`asus`**, hostname **`gx10-4428`**, LAN IP `10.10.52.82` (venue wifi; LAN-only).
 
@@ -29,7 +32,7 @@ ssh asus@gx10-4428                      # Tailscale SSH (or: ssh asus@100.x.y.z)
 
 # Bring the demo up on the box, then open the public URL anywhere:
 ssh asus@gx10-4428 'cd ~/dev/spark-hack-toronto && . .venv/bin/activate && make demo'
-#   → https://gx10-4428.<your-tailnet>.ts.net   (public, read-only)
+#   → https://gx10-4428.taila9fe06.ts.net   (public, read-only)
 ```
 
 ---
@@ -133,7 +136,7 @@ Then just: `ssh gx10`.
 ```bash
 tailscale status                                        # box + your devices listed, online
 ssh asus@gx10-4428 'hostname'                           # → gx10-4428
-curl -s https://gx10-4428.<your-tailnet>.ts.net/health  # → {"status":"ok",...}
+curl -s https://gx10-4428.taila9fe06.ts.net/health      # → {"status":"ok",...}  (verified working)
 ```
 
 ## Security posture
