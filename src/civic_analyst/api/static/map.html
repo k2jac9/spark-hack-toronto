@@ -181,6 +181,9 @@
     .infoboard.b-medium .ib-score { color: var(--risk-medium); }
     .infoboard.b-low .ib-score { color: var(--risk-low); }
     .infoboard.b-none .ib-score { color: var(--risk-none); }
+    /* Keep hover tooltips below the floating info card so they never smear over it. */
+    .maplibregl-popup { z-index: 2; }
+    .maplibregl-marker { z-index: 3; }
   </style>
 </head>
 <body>
@@ -504,6 +507,9 @@
       if (!row || !mapReady) return;
       const want = (label.match(/^\s*(\d+)/) || [])[1];   // leading house number
       const seq = ++focusSeq;
+      // Tear down the previous selection's highlight at selection time, so the stale
+      // magenta footprint doesn't stay lit on the OLD building through the 1200ms flyTo.
+      clearFocus();
       showBoard(row, d);
       map.flyTo({ center: [row.lng, row.lat], zoom: 17.3, pitch: 64, bearing: -22, duration: 1200 });
       map.once('idle', () => {
@@ -516,7 +522,10 @@
         // Prefer the footprint whose house number matches; else the nearest centroid.
         let target = want && feats.find((f) => String(f.properties.addr_housenumber) === want);
         if (!target) {
-          let best = Infinity;
+          // Cap the nearest-centroid fallback (~30m in degrees²) so we don't light up a
+          // neighbouring building when this address has no footprint in view.
+          const MAX_DD = 2.7e-7;
+          let best = MAX_DD;
           feats.forEach((f) => {
             if (f.geometry.type !== 'Polygon') return;
             const c = bldCentroid(f.geometry); if (!c) return;
@@ -597,6 +606,9 @@
       map.on('click', 'risk-pins', (e) => analyze(e.features[0].properties.label));
       map.on('mouseenter', 'risk-pins', (e) => {
         map.getCanvas().style.cursor = 'pointer';
+        // In presentation mode the floating info card sits over the focused pin; don't
+        // smear the hover tooltip across it. Suppress the tooltip while a card is open.
+        if (infoBoard) return;
         const p = e.features[0].properties, k = bandOf(p.risk), b = BANDS[k];
         hoverPopup.setLngLat(e.lngLat)
           .setHTML('<b>' + esc(p.label) + '</b><br><span class="b-' + k + '">' + b.sym + ' ' +
