@@ -13,6 +13,7 @@ becomes available, the next call still produces (and then caches) a real digest.
 """
 from __future__ import annotations
 
+import re
 import threading
 
 from .llm import LocalLLM, batch_llm
@@ -21,8 +22,25 @@ SYSTEM = (
     "You are a municipal operations analyst. Given a ranked list of Toronto "
     "addresses with risk scores and counts, write a 4-sentence briefing for an "
     "inspections manager: the top hotspots, the dominant risk pattern, and where "
-    "to deploy inspectors first. Be specific and do not invent addresses."
+    "to deploy inspectors first. Be specific and do not invent addresses. Do not "
+    "editorialize about data completeness (e.g. missing fields, postal codes, or "
+    "null values) — report only on risk."
 )
+
+# Raw DineSafe labels embed a literal "None" street-direction token, e.g.
+# "142 Parliament St None M5A 2Z1" — the postal code IS present after it. Left
+# in, the LLM misreads the stray token as a missing postal code. Strip any
+# standalone "None"/"NONE" word (not substrings like "Noneworth") and collapse
+# the resulting whitespace, keeping the street number and postal code intact.
+_NONE_TOKEN = re.compile(r"\bnone\b", flags=re.IGNORECASE)
+_WS = re.compile(r"\s+")
+
+
+def _clean_label(label: str) -> str:
+    """Remove a stray standalone 'None' token from a display label."""
+    if not label:
+        return label
+    return _WS.sub(" ", _NONE_TOKEN.sub(" ", label)).strip()
 
 # Module-level cache: { ranked_signature: real_digest_string }. A dict + lock is
 # plenty thread-safe for uvicorn's worker(s); we only ever store real results.
@@ -31,7 +49,7 @@ _cache: dict[tuple, str] = {}
 
 
 def _addr(r: dict) -> str:
-    return r.get("address") or r.get("label") or "?"
+    return _clean_label(r.get("address") or r.get("label") or "?")
 
 
 def _signature(ranked: list[dict]) -> tuple:
