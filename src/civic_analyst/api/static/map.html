@@ -141,12 +141,27 @@
     @media (prefers-reduced-motion: reduce) {
       html[data-theme="cyber"] #panel::after { display: none; }
     }
-    /* Focused-building label popup (shown when a building is in focus in 3D). */
-    .maplibregl-popup.focuspop .maplibregl-popup-content { background: #0a1422; color: #bfefff;
-      border: 1px solid #00e5ff55; border-radius: 8px; font-size: 12px; padding: 8px 12px;
-      box-shadow: 0 0 12px #00e5ff44; }
-    .maplibregl-popup.focuspop .maplibregl-popup-tip {
-      border-top-color: #0a1422; border-bottom-color: #0a1422; }
+    /* Floating 3D info board — a holographic billboard anchored over the focused building. */
+    .infoboard { position: relative; pointer-events: none; width: 216px;
+      background: linear-gradient(180deg, rgba(8,22,34,.94), rgba(5,12,20,.94));
+      border: 1px solid #00e5ff88; border-radius: 10px; padding: 10px 12px; color: #d8f6ff;
+      font-family: ui-monospace, "Cascadia Code", monospace;
+      box-shadow: 0 0 20px #00e5ff55, inset 0 0 26px #00e5ff14; backdrop-filter: blur(3px); }
+    .infoboard .ib-h { font-size: 12px; font-weight: 700; letter-spacing: .03em; color: #eaffff; }
+    .infoboard .ib-score { font-size: 30px; font-weight: 700; line-height: 1.15; margin: 2px 0;
+      text-shadow: 0 0 12px currentColor; }
+    .infoboard .ib-band { font-size: 12px; margin-left: 8px; }
+    .infoboard .ib-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+    .infoboard .ib-chip { font-size: 10px; padding: 1px 7px; border: 1px solid #00e5ff66;
+      border-radius: 999px; color: #aef6ff; }
+    .infoboard .ib-rec { font-size: 11px; color: #9fd9e8; margin-top: 4px; line-height: 1.35; }
+    .infoboard .ib-foot { font-size: 10px; color: #6fb0c4; margin-top: 6px; }
+    .infoboard .ib-stem { position: absolute; left: 50%; bottom: -18px; width: 1px; height: 18px;
+      background: linear-gradient(#00e5ff, transparent); transform: translateX(-50%); }
+    .infoboard.b-high .ib-score { color: #ff3b6b; }
+    .infoboard.b-medium .ib-score { color: #ffb020; }
+    .infoboard.b-low .ib-score { color: #ffe34d; }
+    .infoboard.b-none .ib-score { color: #2bff88; }
   </style>
 </head>
 <body>
@@ -245,9 +260,8 @@
         '<p class="hint">Select a pin or an address to see its risk read.</p>';
       document.querySelectorAll('#addrlist button').forEach((b) => b.removeAttribute('aria-current'));
       setSelected(null);
-      if (PRES && mapReady) {   // back out of a building focus to the risk-skyline overview
+      if (PRES && mapReady) {   // back out of a building focus to the skyline overview
         clearFocus();
-        if (map.getLayer('risk3d')) map.setLayoutProperty('risk3d', 'visibility', 'visible');
         map.easeTo({ zoom: 13.4, pitch: 55, bearing: -18, duration: 800 });
       }
     }
@@ -259,8 +273,8 @@
       document.querySelectorAll('#addrlist button').forEach((b) =>
         b.setAttribute('aria-current', String(b.dataset.label === address)));
       setSelected(address);
-      // In Presentation Mode, focus the real building at the address (extrude + orbit).
-      if (PRES) focusBuilding(address);
+      // In Presentation Mode, focus the real building + float its 3D info board.
+      if (PRES) focusBuilding(address, d);
 
       // Not-found is NOT an all-clear: show a distinct state, never a 0 score (#2).
       if (!d.found) {
@@ -405,21 +419,9 @@
       };
     }
 
-    // ---- Presentation Mode: cyber theme + 3D "risk skyline" (opt-in, default off) ----
-    // Each address becomes an extruded column: height = risk, color = band. Real building
-    // footprints are extruded for context. Fully native MapLibre — no new deps, stays offline.
-    const riskColor = (r) => r >= 0.67 ? '#ff3b6b' : r >= 0.34 ? '#ffb020' : r > 0 ? '#ffe34d' : '#2bff88';
-    function buildRisk3D() {
-      const D = 0.00012;  // half-width of each column footprint, in degrees
-      return { type: 'FeatureCollection', features: ADDR_ROWS
-        .filter((a) => a.lat && a.lng).map((a) => {
-          const x = a.lng, y = a.lat;
-          return { type: 'Feature',
-            properties: { label: a.label, h: 60 + a.risk_score * 640, color: riskColor(a.risk_score) },
-            geometry: { type: 'Polygon',
-              coordinates: [[[x-D, y-D], [x+D, y-D], [x+D, y+D], [x-D, y+D], [x-D, y-D]]] } };
-        }) };
-    }
+    // ---- Presentation Mode: cyber theme + real 3D building skyline (opt-in, default off) ----
+    // The flat map tilts into a 3D scene where every footprint is extruded to its real height.
+    // Selecting an address focuses its building and floats a 3D info board above it (no columns).
     function enter3D() {
       if (!mapReady) return;
       if (!map.getLayer('bldreal')) {
@@ -432,57 +434,58 @@
                      'fill-extrusion-height': ['coalesce', ['get', 'height'], 9],
                      'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
                      'fill-extrusion-opacity': 0.85 } }, 'risk-pins');
-        } catch (e) { /* basemap may lack a buildings layer — columns still work */ }
-      }
-      if (map.getSource('risk3d')) map.getSource('risk3d').setData(buildRisk3D());
-      else map.addSource('risk3d', { type: 'geojson', data: buildRisk3D() });
-      if (!map.getLayer('risk3d')) {
-        map.addLayer({ id: 'risk3d', source: 'risk3d', type: 'fill-extrusion',
-          paint: { 'fill-extrusion-color': ['get', 'color'], 'fill-extrusion-base': 0,
-                   'fill-extrusion-height': 0, 'fill-extrusion-opacity': 0.9 } });
-        // Animate the columns rising (rAF ramp — robust across paint-expression changes).
-        const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if (reduce) { map.setPaintProperty('risk3d', 'fill-extrusion-height', ['get', 'h']); }
-        else {
-          const t0 = performance.now();
-          (function grow() {
-            if (!map.getLayer('risk3d')) return;
-            const k = Math.min(1, (performance.now() - t0) / 700);
-            map.setPaintProperty('risk3d', 'fill-extrusion-height', ['*', ['get', 'h'], k]);
-            if (k < 1) requestAnimationFrame(grow);
-          })();
-        }
+        } catch (e) { /* basemap may lack a buildings layer */ }
       }
       map.easeTo({ pitch: 55, bearing: -18, duration: 900 });
     }
     function exit3D() {
       clearFocus();
-      if (map.getLayer('risk3d')) map.removeLayer('risk3d');
-      if (map.getSource('risk3d')) map.removeSource('risk3d');
       if (map.getLayer('bldreal')) map.removeLayer('bldreal');
       if (mapReady) map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
     }
-    // ---- Real building focus: extrude the actual footprint at the selected address ----
-    const focusPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false,
-      offset: 14, className: 'focuspop' });
-    let focusSeq = 0;
+    // ---- Real building focus + floating 3D info board over the selected address ----
+    let focusSeq = 0, infoBoard = null;
     const bldCentroid = (geom) => {
       const ring = (geom && geom.coordinates && geom.coordinates[0]) || [];
       let x = 0, y = 0, n = 0;
       ring.forEach((c) => { x += c[0]; y += c[1]; n++; });
       return n ? [x / n, y / n] : null;
     };
+    // Order matters: the licence dataset name also contains "Permits", so test it first.
+    const shortDataset = (n) => /licen[cs]e/i.test(n) ? 'Licences'
+      : /dinesafe/i.test(n) ? 'DineSafe' : /permit/i.test(n) ? 'Permits' : n;
     function clearFocus() {
-      focusPopup.remove();
+      if (infoBoard) { infoBoard.remove(); infoBoard = null; }
       if (map.getLayer('focusbld')) map.removeLayer('focusbld');
       if (map.getSource('focusbld')) map.removeSource('focusbld');
     }
-    function focusBuilding(label) {
+    // The 3D info board: a screen-facing HTML billboard anchored above the building. Full
+    // styling, no glyph fonts needed — stays offline. Shows risk + datasets + recommendation.
+    function showBoard(row, d) {
+      const band = BANDS[d.risk_band] || BANDS.none;
+      const datasets = [...new Set((d.evidence || []).map((e) => shortDataset(e.dataset)))]
+        .map((s) => '<span class="ib-chip">' + esc(s) + '</span>').join('');
+      const rec = (d.claims || []).map((c) => c.text).slice(-1)[0] || '';
+      const el = document.createElement('div');
+      el.className = 'infoboard b-' + d.risk_band;
+      el.innerHTML =
+        '<div class="ib-h">' + esc(d.matched_address || row.label) + '</div>' +
+        '<div class="ib-score">' + d.risk_score +
+          '<span class="ib-band">' + band.sym + ' ' + band.label + '</span></div>' +
+        (datasets ? '<div class="ib-chips">' + datasets + '</div>' : '') +
+        (rec ? '<div class="ib-rec">' + esc(rec) + '</div>' : '') +
+        '<div class="ib-foot">✓ verify each claim in the panel →</div>' +
+        '<div class="ib-stem"></div>';
+      if (infoBoard) infoBoard.remove();
+      infoBoard = new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [0, -22] })
+        .setLngLat([row.lng, row.lat]).addTo(map);
+    }
+    function focusBuilding(label, d) {
       const row = ADDR_ROWS.find((a) => a.label === label);
       if (!row || !mapReady) return;
       const want = (label.match(/^\s*(\d+)/) || [])[1];   // leading house number
       const seq = ++focusSeq;
-      if (map.getLayer('risk3d')) map.setLayoutProperty('risk3d', 'visibility', 'none');
+      showBoard(row, d);
       map.flyTo({ center: [row.lng, row.lat], zoom: 17.3, pitch: 64, bearing: -22, duration: 1200 });
       map.once('idle', () => {
         if (seq !== focusSeq || !PRES) return;   // superseded by a newer click, or left 3D
@@ -498,11 +501,12 @@
           feats.forEach((f) => {
             if (f.geometry.type !== 'Polygon') return;
             const c = bldCentroid(f.geometry); if (!c) return;
-            const d = (c[0] - row.lng) ** 2 + (c[1] - row.lat) ** 2;
-            if (d < best) { best = d; target = f; }
+            const dd = (c[0] - row.lng) ** 2 + (c[1] - row.lat) ** 2;
+            if (dd < best) { best = dd; target = f; }
           });
         }
-        clearFocus();
+        if (map.getLayer('focusbld')) map.removeLayer('focusbld');
+        if (map.getSource('focusbld')) map.removeSource('focusbld');
         if (!target) return;
         const col = { high: '#ff3b6b', medium: '#ffb020', low: '#ffe34d', none: '#2bff88' }[bandOf(row.risk_score)];
         map.addSource('focusbld', { type: 'geojson',
@@ -512,11 +516,6 @@
                    'fill-extrusion-height': ['coalesce', ['get', 'height'], 18],
                    'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
                    'fill-extrusion-opacity': 0.96 } });
-        const h = target.properties.height, c = bldCentroid(target.geometry);
-        if (c) focusPopup.setLngLat(c).setHTML(
-          '<b>' + esc(row.label) + '</b><br>' +
-          (h ? '≈ ' + h + ' m tall' : 'height approx.') +
-          ' · risk ' + row.risk_score).addTo(map);
       });
     }
     function setPresentation(on) {
@@ -587,10 +586,6 @@
       map.on('mouseleave', 'risk-pins', () => {
         map.getCanvas().style.cursor = ''; hoverPopup.remove();
       });
-      // 3D risk columns are clickable/hoverable just like the flat pins.
-      map.on('click', 'risk3d', (e) => analyze(e.features[0].properties.label));
-      map.on('mouseenter', 'risk3d', () => { map.getCanvas().style.cursor = 'pointer'; });
-      map.on('mouseleave', 'risk3d', () => { map.getCanvas().style.cursor = ''; });
       mapReady = true;
       if (PRES) enter3D();   // restore 3D if the saved preference had it on
       // Set status LAST: it's the single "fully ready" signal (nothing rewrites
