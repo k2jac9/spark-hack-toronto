@@ -30,10 +30,16 @@ Box identity: user **`asus`**, hostname **`gx10-4428`**, LAN IP `10.10.52.82` (v
 # From any device signed into the same tailnet:
 ssh asus@gx10-4428                      # Tailscale SSH (or: ssh asus@100.x.y.z)
 
-# Bring the demo up on the box, then open the public URL anywhere:
-ssh asus@gx10-4428 'cd ~/dev/spark-hack-toronto && . .venv/bin/activate && make demo'
+# Bring the demo up AND flip the public URL on, in one command (on the box):
+ssh asus@gx10-4428 'cd ~/dev/spark-hack-toronto && . .venv/bin/activate && make demo-public'
 #   → https://gx10-4428.taila9fe06.ts.net   (public, read-only)
+
+# Take the public URL back down when you're done:
+ssh asus@gx10-4428 'cd ~/dev/spark-hack-toronto && make funnel-off'
 ```
+
+**`make demo` = local only** (no public URL) · **`make demo-public` = local + public Funnel** ·
+**`make funnel-off` = guaranteed teardown** (the Ctrl-C trap is best-effort).
 
 ---
 
@@ -71,17 +77,24 @@ Funnel = the public demo URL. One-time, browser-only:
 >   *OPTIONAL* block in [`tailscale-policy.hujson`](./tailscale-policy.hujson), then bring the box
 >   up with `sudo tailscale up --ssh --advertise-tags=tag:demo`.
 
-### 3. Expose the demo publicly
+### 3. Expose the demo publicly — one command
 ```bash
-# Start the demo (binds 127.0.0.1:8000; Tailscale proxies it locally):
-cd ~/dev/spark-hack-toronto && . .venv/bin/activate && make demo   # leave running
-
-# In another shell — publish :8000 to the public internet over HTTPS:
-tailscale funnel --bg 8000
-tailscale funnel status            # shows the public https URL
+cd ~/dev/spark-hack-toronto && . .venv/bin/activate
+make demo-public          # serves :8000 AND flips Funnel on; prints the public URL
+# ... demo ...
+make funnel-off           # take the public URL back down (reliable teardown)
 ```
-- `tailscale serve --bg 8000` instead → serves it **privately** on the tailnet only (no public exposure).
-- Turn it off: `tailscale funnel --bg off` (or `tailscale serve reset`).
+`make demo-public` is best-effort about Funnel: off-box, or without operator + the `funnel`
+policy attr, it just serves locally. Requires `sudo tailscale set --operator=$USER` once so
+the Makefile can manage Funnel without sudo.
+
+Under the hood (if you'd rather do it by hand):
+```bash
+make demo                          # local server on :8000 (no public URL)
+tailscale funnel --bg 8000         # publish :8000 publicly over HTTPS
+tailscale serve  --bg 8000         # ...or serve it PRIVATELY on the tailnet only
+tailscale funnel --https=443 off   # turn the public URL off
+```
 
 ---
 

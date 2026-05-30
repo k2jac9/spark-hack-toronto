@@ -1,4 +1,4 @@
-.PHONY: install install-hooks data serve cli test demo demo-cli demo-data
+.PHONY: install install-hooks data serve cli test demo demo-public funnel-off demo-cli demo-data
 
 # demo  -> real downtown-Toronto slice (demo_data/), pins land on the offline map.
 # demo-cli/tests -> synthetic, deterministic fixtures/.
@@ -37,6 +37,28 @@ demo:
 	@echo "  open http://localhost:8000/                 # offline map, real establishments"
 	@echo "  curl 'http://localhost:8000/health'"
 	DATA_DIR=$(DEMO_DATA) $(PYTHON) -m uvicorn civic_analyst.api.server:app --port 8000 --app-dir src
+
+# Public demo: same as `make demo`, but also flips this box's Tailscale Funnel
+# ON (public read-only HTTPS URL) for the session and turns it OFF on exit.
+# Funnel is best-effort: off-box / without operator+policy it just runs local.
+# See docs/REMOTE_ACCESS.md.
+demo-public:
+	@echo "Public demo: real downtown data + Tailscale Funnel (read-only HTTPS)."
+	@if command -v tailscale >/dev/null 2>&1 && tailscale funnel --bg 8000 >/dev/null 2>&1; then \
+	  url=$$(tailscale funnel status 2>/dev/null | grep -oE 'https://[^ ]+' | head -1); \
+	  echo "  PUBLIC: $$url   (share with judges)"; \
+	  echo "  Stop with Ctrl-C. If the public URL stays up afterwards, run: make funnel-off"; \
+	  trap 'tailscale funnel --https=443 off >/dev/null 2>&1' EXIT INT TERM; \
+	else \
+	  echo "  (Funnel unavailable — serving local-only; see docs/REMOTE_ACCESS.md)"; \
+	fi; \
+	echo "  LOCAL:  http://localhost:8000/"; \
+	DATA_DIR=$(DEMO_DATA) $(PYTHON) -m uvicorn civic_analyst.api.server:app --port 8000 --app-dir src
+
+# Reliably take the public demo URL down (Funnel off). Run after a public demo.
+funnel-off:
+	@tailscale funnel --https=443 off 2>/dev/null && echo "Funnel off — public URL is down." \
+	  || echo "Funnel was not on (or tailscale unavailable)."
 
 # Rebuild the real downtown slice from the live dataset.
 demo-data:
