@@ -33,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 
 from urban_os.adapters import downtown_scenario
 from urban_os.kernel import Simulation
-from urban_os.lenses import EconomicLens, EventSurge
+from urban_os.lenses import EconomicLens, EventSurge, WeatherLens
 from urban_os.narrate import build_insight
 from urban_os.optimize import optimize
 
@@ -57,10 +57,24 @@ def _scenario():
 
 
 def _lenses(sc):
-    """The two-lens stack the kernel/optimizer/narrator run against."""
+    """The three-lens stack the kernel/optimizer/narrator run against.
+
+    Order matters: WeatherLens.couple multiplies the standing ``risk`` field, so
+    it must run AFTER EconomicLens has populated it (see ADR-0007). The rain cell
+    peaks with the egress wave (``peak_time = event_end``) so its drainage tax +
+    crush-risk bonus land while the crowd is on the platforms. It contributes a
+    second optimizer lever (shelter coverage) which the grid search composes with
+    EventSurge's staggered release automatically.
+    """
     return [
         EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end),
         EconomicLens(),
+        WeatherLens(
+            peak_time=sc.event_end,
+            intensity=0.7,
+            width=20.0,
+            crowd_size=sc.crowd_size,
+        ),
     ]
 
 
