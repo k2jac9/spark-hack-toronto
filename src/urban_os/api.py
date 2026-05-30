@@ -20,10 +20,14 @@ Endpoints:
 """
 from __future__ import annotations
 
+import math
+import numbers
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import FastAPI, Query
+import numpy as np
+
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -61,13 +65,54 @@ def _lenses(sc):
 
 
 def _r(x: float, places: int = 3) -> float:
-    """Round to keep the payload small; always returns a native float."""
-    return round(float(x), places)
+    """Round to keep the payload small; always returns a native float.
+
+    Coerces numpy scalars to a native ``float`` (numpy scalars are NOT
+    JSON-serializable — this is the boundary that guarantees no numpy leaks into
+    a response). Non-finite values (NaN/±inf) are clamped to ``0.0`` so a
+    degenerate field can never produce an invalid JSON token (``NaN``/``Infinity``
+    are not legal JSON and would break strict parsers in the browser).
+    """
+    v = float(x)
+    if not math.isfinite(v):
+        return 0.0
+    return round(v, places)
+
+
+def _native(obj):
+    """Recursively coerce a (possibly numpy-laced) structure to native Python.
+
+    ``optimize.OptResult.to_dict()`` carries lever values straight off an
+    ``np.arange`` grid, so its ``params``/``trials`` hold ``numpy.float64``
+    scalars. Those happen to JSON-encode today (numpy floats subclass ``float``)
+    but still violate the "no numpy leakage at the boundary" invariant and would
+    break a stricter encoder. We can't touch ``optimize.py`` (other workstreams
+    own it), so we sanitize its blob here. Non-finite floats are clamped to 0.0
+    to keep the JSON strictly valid.
+    """
+    if isinstance(obj, dict):
+        return {k: _native(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_native(v) for v in obj]
+    if isinstance(obj, bool):  # bool before int/float (bool is an int subclass)
+        return bool(obj)
+    if isinstance(obj, np.bool_):  # numpy bool is NOT a python bool/Integral
+        return bool(obj)
+    if isinstance(obj, numbers.Integral):
+        return int(obj)
+    if isinstance(obj, numbers.Real):
+        f = float(obj)
+        return f if math.isfinite(f) else 0.0
+    return obj  # str / None / already-native pass through unchanged
 
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
-    return (_UI_DIR / "urban_os.html").read_text()
+    page = _UI_DIR / "urban_os.html"
+    try:
+        return page.read_text(encoding="utf-8")
+    except OSError as exc:  # missing/unreadable page asset — fail loudly, not blank
+        raise HTTPException(status_code=500, detail="map UI asset unavailable") from exc
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -117,14 +162,29 @@ def simulate(
     frame_every: int = Query(2, ge=1, le=60),
 ) -> dict:
     """Run the sim at the given staggered-release lever and return per-step frames
-    (subsampled by ``frame_every`` to cap payload size) for the heatmap + slider."""
+    (subsampled by ``frame_every`` to cap payload size) for the heatmap + slider.
+
+    Bounds are enforced declaratively by ``Query`` (out-of-range → 422). We add
+    two boundary guards: ``release_minutes`` is rejected if it is not finite (a
+    client can send ``release_minutes=nan`` — it satisfies neither ``ge`` nor
+    ``le`` in some stacks, so we check explicitly), and ``frame_every`` is capped
+    at the horizon so a large value still yields at least the first frame.
+    """
     sc = _scenario()
     sub = sc.substrate
+
+    release = float(release_minutes)
+    if not math.isfinite(release):
+        raise HTTPException(status_code=422, detail="release_minutes must be finite")
+    # Never subsample coarser than the run length (always at least one frame).
+    frame_every = min(int(frame_every), max(1, int(sc.horizon)))
+
     lenses = _lenses(sc)
-    sim = Simulation(
-        sub, lenses, params={"release_minutes": float(release_minutes)}, dt=sc.dt
-    )
-    result = sim.run(sc.horizon, frame_every=frame_every)
+    sim = Simulation(sub, lenses, params={"release_minutes": release}, dt=sc.dt)
+    try:
+        result = sim.run(sc.horizon, frame_every=frame_every)
+    except Exception as exc:  # kernel failure — surface a clean 500, no stack leak
+        raise HTTPException(status_code=500, detail="simulation failed") from exc
 
     frames = []
     for fr in result.frames:
@@ -179,13 +239,16 @@ def optimize_endpoint() -> dict:
     needs for the before/after panel (insight sentence, peaks, savings, levers)."""
     sc = _scenario()
     lenses = _lenses(sc)
-    opt = optimize(sc.substrate, lenses, sc.horizon, dt=sc.dt)
-    insight = build_insight(opt, event_end=sc.event_end)
+    try:
+        opt = optimize(sc.substrate, lenses, sc.horizon, dt=sc.dt)
+        insight = build_insight(opt, event_end=sc.event_end)
+    except Exception as exc:  # optimizer/narrator failure — clean 500, no stack leak
+        raise HTTPException(status_code=500, detail="optimization failed") from exc
     return {
         "insight": insight.text,
         "grounded": bool(insight.grounded),
-        "figures": insight.figures,
-        "optimization": opt.to_dict(),
+        "figures": _native(insight.figures),
+        "optimization": _native(opt.to_dict()),
         "baseline_peak": _peak_dict(opt.baseline_result),
         "best_peak": _peak_dict(opt.best_result),
         "best_params": {k: _r(v, 3) for k, v in opt.best_params.items()},
