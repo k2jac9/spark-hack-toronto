@@ -60,6 +60,21 @@ def evidence_total(findings) -> int:
     return len(unique_records(findings))
 
 
+def _coverage_order(records: dict[str, dict]) -> list[tuple[str, dict]]:
+    """Order records so the first row of each distinct kind leads, then the rest in
+    original order. Ensures the evidence cap never silently hides an entire dataset:
+    at least one row of every kind (permit / inspection / licence) always survives,
+    so a fused address shows all its datasets, not just the most numerous (#3)."""
+    head: list[tuple[str, dict]] = []
+    tail: list[tuple[str, dict]] = []
+    seen: set[str] = set()
+    for rid, rec in records.items():
+        kind = rec.get("kind", "record")
+        (head if kind not in seen else tail).append((rid, rec))
+        seen.add(kind)
+    return head + tail
+
+
 def evidence_index(
     findings, cap: int = EVIDENCE_CAP
 ) -> tuple[list[dict], dict[str, dict], dict[str, str]]:
@@ -69,7 +84,7 @@ def evidence_index(
     tagged: list[dict] = []
     tag_map: dict[str, dict] = {}
     id_to_tag: dict[str, str] = {}
-    for rid, rec in unique_records(findings).items():
+    for rid, rec in _coverage_order(unique_records(findings)):
         if len(tagged) >= cap:
             break
         key = rec.get("dataset")
@@ -168,6 +183,7 @@ def deterministic_claims(address: str, findings, tagged: list[dict],
                     if r.get("kind") == "permit" and str(r.get("status", "")).lower() != "closed"]
     adverse = [r for r in recs.values()
                if r.get("kind") == "inspection" and classify_inspection(r.get("outcome")) != "pass"]
+    licences = [r for r in recs.values() if r.get("kind") == "licence"]
 
     claims = [{"claim": f"{len(recs)} linked record(s) for {address!r}.",
                "source": next(iter(id_to_tag.values()), None)}]
@@ -177,6 +193,12 @@ def deterministic_claims(address: str, findings, tagged: list[dict],
     if adverse:
         claims.append({"claim": f"{len(adverse)} adverse food-safety inspection(s).",
                        "source": id_to_tag.get(adverse[0].get("id"))})
+    # Licences are identity context, not a risk signal (no score weight) — surfaced
+    # so a fused address visibly cites all three datasets, with a click-to-verify tag.
+    if licences:
+        claims.append({"claim": f"{len(licences)} business licence(s) on record "
+                       "(identity link across datasets, not a risk signal).",
+                       "source": id_to_tag.get(licences[0].get("id"))})
     claims.append(_recommendation(findings, id_to_tag))
     return claims
 

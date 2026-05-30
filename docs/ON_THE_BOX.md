@@ -29,12 +29,25 @@ step 2.)
 ## 2. Wire the real local model (Nemotron via Ollama)
 ```bash
 ollama pull nemotron-3-nano      # interactive tier (MoE, ~3B active → ~40-60 tok/s)
-ollama pull gpt-oss:120b         # batch tier for /digest (optional)
+ollama pull nemotron3:33b        # batch tier for /digest (coexists with Nano)
 # Ollama serves an OpenAI-compatible endpoint at http://localhost:11434/v1
 ```
-In `.env` set: `LLM_MODEL=nemotron-3-nano`, `LLM_BATCH_MODEL=gpt-oss:120b`. Restart
-`make demo`. Now `/analyze` narratives come from Nemotron; the verifier still rejects any
-unverified number/source and falls back to the deterministic summary.
+These are the **defaults** (see `config.py`) — no `.env` needed if you pull these tags.
+Restart `make demo`. Now `/analyze` narratives come from Nemotron; the verifier still
+rejects any unverified number/source and falls back to the deterministic summary.
+
+Two box-specific tunings (both default-on, in `config.py`):
+- **`LLM_REASONING_EFFORT=none`** for the interactive narrator. Nemotron 3 is a reasoning
+  model; left on, it emits a ~640-token chain-of-thought before the JSON answer (~10x the
+  latency). The narrator does constrained extraction, so we disable it → **/analyze ≈ 1.6s
+  warm** instead of ~25s. The batch digest keeps reasoning **on** (it's a real synthesis task).
+- **`LLM_PREWARM=1`** loads the interactive model at server boot (daemon thread) so the
+  first demo `/analyze` isn't paying the ~5s cold-load.
+
+Why **`nemotron3:33b`** for batch, not a 120B: a 120B (super / gpt-oss) needs ~86–94GB and
+**evicts** the resident Nano, so the next `/analyze` cold-loads. The 33B (≈32GB) + Nano
+(≈27GB) both stay GPU-resident (~59GB of 121GB) — `/digest` never destabilizes `/analyze`.
+For a bigger box, `LLM_BATCH_MODEL=nemotron-3-super` gives a stronger digest (≈82s).
 
 Why these models: decode is **memory-bound** (`tok/s ≈ 190 GB/s ÷ active-bytes`), so
 MoE/small-active + FP4 is the only responsive choice. Dense 70B ≈ 2.7 tok/s (avoid).
