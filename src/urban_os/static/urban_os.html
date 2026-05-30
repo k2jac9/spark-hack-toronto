@@ -134,6 +134,9 @@
       attributionControl: { compact: true },
       style: {
         version: 8,
+        // Offline glyphs (vendored Open Sans PBFs, same-origin) so the node
+        // labels' SDF text can render — without this, text-field silently no-ops.
+        glyphs: `${location.origin}/static/fonts/{fontstack}/{range}.pbf`,
         sources: { proto: { type: 'vector', url: PMTILES, attribution: '© OpenStreetMap' } },
         layers: [
           { id: 'bg', type: 'background', paint: { 'background-color': '#0b1220' } },
@@ -218,7 +221,8 @@
           'circle-stroke-color': ['case', ['get', 'is_sink'], '#475569', '#0b1220']
         } });
       map.addLayer({ id: 'nodes-lbl', source: 'nodes', type: 'symbol',
-        layout: { 'text-field': ['get', 'label'], 'text-size': 11, 'text-offset': [0, 1.4],
+        layout: { 'text-field': ['get', 'label'], 'text-font': ['OpenSans'],
+                  'text-size': 11, 'text-offset': [0, 1.4],
                   'text-anchor': 'top', 'text-allow-overlap': false },
         paint: { 'text-color': '#e2e8f0', 'text-halo-color': '#0b1220', 'text-halo-width': 1.4 } });
 
