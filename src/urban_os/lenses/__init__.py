@@ -1,16 +1,22 @@
 """Domain lenses — portable across city adapters.
 
 A lens plugs domain behaviour into the kernel through the four-operator contract
-(see ``urban_os.kernel.operators.Lens``). P0 ships two:
+(see ``urban_os.kernel.operators.Lens``). P0 ships two, plus a third domain lens:
 
 - :class:`EventSurge` — an event's egress wave (a ``source``) with a
   staggered-release ``lever`` the optimizer can tune.
 - :class:`EconomicLens` — turns congestion into crowd-safety ``risk`` and a
   dollar ``cost`` of commuter delay (a ``couple`` + ``observe`` + ``J`` term).
+- :class:`WeatherLens` — rain that slows network drainage (a transient tax on
+  link capacity) and amplifies crowd-safety ``risk``, with a shelter-deployment
+  ``lever`` (a ``source`` + ``couple`` + ``observe`` + ``J`` term). Place it
+  *after* :class:`EconomicLens` in the stack so its risk multiplier lands on a
+  populated ``risk`` field.
 """
 from __future__ import annotations
 
 from .economic import EconomicLens
 from .event_surge import EventSurge
+from .weather import WeatherLens
 
-__all__ = ["EventSurge", "EconomicLens"]
+__all__ = ["EventSurge", "EconomicLens", "WeatherLens"]
