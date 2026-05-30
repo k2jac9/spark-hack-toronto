@@ -22,9 +22,17 @@ EVIDENCE_CAP = 12  # max evidence rows surfaced per analysis (disclosed, never s
 # Two-index scoring (ADR 0014). Construction activity and food safety are SEPARATE
 # axes — a busy permit address and a failed-inspection address are different problems,
 # so we never blend them into one number. Each is a smooth saturating function of its
-# own count, then read through the shared `risk_band` thresholds independently.
+# own signal, then read through the shared `risk_band` thresholds independently.
 _ACTIVITY_K = 0.06  # open permits → activity index
-_SAFETY_K = 0.45    # adverse inspection VISITS → safety index
+_SAFETY_K = 0.45    # severity-weighted adverse VISITS → safety index
+
+# Section-6 severity weights for the safety index. Counting a gentle Conditional Pass
+# as a full adverse visit saturates the score: unweighted, 1 visit → 1-exp(-0.45) =
+# 0.362 ≥ 0.34 = MEDIUM, so NO integer count can land in LOW (a structurally dead
+# band). Down-weighting minors restores a real gradient: a Conditional Pass is a
+# routine follow-up (0.3), a Fail/Closed/conviction is enforcement-grade (1.0).
+_W_MINOR_VISIT = 0.3
+_W_SEVERE_VISIT = 1.0
 
 
 def activity_index(open_permits: int) -> float:
@@ -32,11 +40,13 @@ def activity_index(open_permits: int) -> float:
     return round(1.0 - math.exp(-_ACTIVITY_K * max(0, open_permits)), 3)
 
 
-def safety_index(adverse_visits: int) -> float:
-    """Food-safety index from the count of NON-pass inspection visits. Severity
-    (minor vs severe) is deliberately NOT in this score — it lives in the prose;
-    severity-weighting is a documented future refinement (ADR 0014)."""
-    return round(1.0 - math.exp(-_SAFETY_K * max(0, adverse_visits)), 3)
+def safety_index(minor_visits: int, severe_visits: int) -> float:
+    """Food-safety index from a SEVERITY-WEIGHTED sum of adverse inspection visits
+    (ADR 0014 §6). Conditional-Pass (minor) visits weigh 0.3, Fail/Closed/conviction
+    (severe) visits weigh 1.0 — so a Conditional-only address reads LOW while a real
+    enforcement site stands out. Visits are already de-duped one-per-visit (ADR 0013)."""
+    weight = _W_MINOR_VISIT * max(0, minor_visits) + _W_SEVERE_VISIT * max(0, severe_visits)
+    return round(1.0 - math.exp(-_SAFETY_K * weight), 3)
 
 
 def classify_inspection(outcome) -> str:
@@ -71,34 +81,42 @@ def _plural(n: int, noun: str) -> str:
     return f"{n} {noun}" + ("" if n == 1 else "s")
 
 
-def two_line_narrative(adverse_visits: int, open_permits: int) -> str:
+def two_line_narrative(minor_visits: int, severe_visits: int, open_permits: int) -> str:
     """Deterministic two-line risk read (ADR 0014 §8): one Safety line, one
     Construction line. Every figure traces straight to the visit/permit counts —
-    no LLM, so it can never hallucinate a number."""
-    sb = _SAFETY_WORD[risk_band(safety_index(adverse_visits))]
+    no LLM, so it can never hallucinate a number. The Safety line keeps severity
+    honest: it names the total adverse visits and breaks out the severe ones."""
+    adverse = minor_visits + severe_visits
+    sb = _SAFETY_WORD[risk_band(safety_index(minor_visits, severe_visits))]
     ab = _ACTIVITY_WORD[risk_band(activity_index(open_permits))]
+    severe_note = f" ({severe_visits} severe)" if severe_visits else ""
     safety = (f"Food safety — {sb}. "
-              + _plural(adverse_visits, "inspection visit") + " of concern.")
+              + _plural(adverse, "inspection visit") + severe_note + " of concern.")
     construction = (f"Construction activity — {ab}. "
                     + _plural(open_permits, "open permit") + ".")
     return safety + " " + construction
 
 
-def compliance_counts(findings) -> tuple[int, int]:
-    """(adverse_visits, open_permits) across a report's findings — the two raw
-    counts that drive both indices and the two-line narrative. Reads the same
+def compliance_counts(findings) -> tuple[int, int, int]:
+    """(minor_visits, severe_visits, open_permits) across a report's findings — the
+    raw counts that drive both indices and the two-line narrative. Reads the same
     de-duped evidence records the indices are computed from, so the prose and the
-    scores can never disagree."""
+    scores can never disagree. Severity is classified per visit (ADR 0013)."""
     recs = unique_records(findings).values()
     open_permits = sum(
         1 for r in recs
         if r.get("kind") == "permit" and str(r.get("status", "")).lower() != "closed"
     )
-    adverse_visits = sum(
-        1 for r in recs
-        if r.get("kind") == "inspection" and classify_inspection(r.get("outcome")) != "pass"
-    )
-    return adverse_visits, open_permits
+    minor_visits = severe_visits = 0
+    for r in recs:
+        if r.get("kind") != "inspection":
+            continue
+        sev = classify_inspection(r.get("outcome"))
+        if sev == "minor":
+            minor_visits += 1
+        elif sev == "severe":
+            severe_visits += 1
+    return minor_visits, severe_visits, open_permits
 
 
 def _ref(rec: dict) -> str:

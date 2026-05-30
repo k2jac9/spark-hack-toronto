@@ -32,7 +32,8 @@ def test_demo_address_is_high_risk_and_clean_address_is_low():
     cold = sup.analyze("55 John St")      # closed permit + passing inspection
 
     # Two-index model (ADR 0014): construction activity and food safety are SEPARATE.
-    # Activity = 1-exp(-0.06*2) = 0.113 (low); Safety = 1-exp(-0.45*2) = 0.593 (medium).
+    # Activity = 1-exp(-0.06*2) = 0.113 (low). Safety is severity-weighted: 2 SEVERE
+    # ("Fail") visits weigh 1.0 each → 1-exp(-0.45*2.0) = 0.593 (medium), unchanged.
     assert hot.risk_activity == 0.113 and hot.band_activity == "low"
     assert hot.risk_safety == 0.593 and hot.band_safety == "medium"
     assert cold.risk_safety == 0.0 and cold.band_safety == "none"

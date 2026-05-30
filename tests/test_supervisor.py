@@ -20,8 +20,8 @@ def test_supervisor_scores_open_permit_and_infraction():
 
     report = Supervisor(g, narrator=_StubNarrator()).analyze("1 Demo St")
 
-    # Two independent indices (ADR 0014): 1 open permit + 1 adverse visit.
-    # Activity = 1-exp(-0.06) = 0.058 (low); Safety = 1-exp(-0.45) = 0.362 (medium).
+    # Two independent indices (ADR 0014): 1 open permit + 1 SEVERE ("Fail") visit.
+    # Activity = 1-exp(-0.06) = 0.058 (low); Safety = 1-exp(-0.45*1.0) = 0.362 (medium).
     assert report.risk_activity == 0.058 and report.band_activity == "low"
     assert report.risk_safety == 0.362 and report.band_safety == "medium"
     assert report.address == "1 Demo St"

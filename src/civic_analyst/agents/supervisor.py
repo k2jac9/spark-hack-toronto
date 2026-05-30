@@ -74,7 +74,7 @@ class Supervisor:
     def analyze(self, address: str) -> RiskReport:
         findings = self._findings(address)
         safety, activity = _axis_scores(findings)
-        adverse_visits, open_permits = compliance_counts(findings)
+        minor_visits, severe_visits, open_permits = compliance_counts(findings)
         claims = self.narrator.claims(address, findings)
         tagged, _, _ = evidence_index(findings)
         return RiskReport(
@@ -85,7 +85,7 @@ class Supervisor:
             band_safety=risk_band(safety),
             risk_activity=activity,
             band_activity=risk_band(activity),
-            narrative=two_line_narrative(adverse_visits, open_permits),
+            narrative=two_line_narrative(minor_visits, severe_visits, open_permits),
             findings=[
                 {"agent": f.agent, "summary": f.summary,
                  "risk_safety": f.risk_safety, "risk_activity": f.risk_activity}

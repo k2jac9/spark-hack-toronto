@@ -69,7 +69,8 @@ class ComplianceAgent:
         severe = [i for i in flagged if classify_inspection(i.get("outcome")) == "severe"]
         # Prose honesty (#3a): "adverse" names SEVERE outcomes only (fail/closed/
         # conviction); a Conditional Pass is a minor follow-up, reported as such.
-        # Severity stays in the prose, NOT in the safety index (ADR 0014).
+        # The safety index is SEVERITY-WEIGHTED (ADR 0014 §6): minors weigh 0.3, severe
+        # 1.0 — so a Conditional-only address reads LOW, not a saturated MEDIUM.
         parts = [f"{len(open_permits)} open permit(s)"]
         if minor:
             parts.append(f"{len(minor)} Conditional Pass visit(s)")
@@ -78,7 +79,7 @@ class ComplianceAgent:
             agent=self.name,
             summary="; ".join(parts) + ".",
             evidence=open_permits + flagged,
-            risk_safety=safety_index(len(flagged)),
+            risk_safety=safety_index(len(minor), len(severe)),
             risk_activity=activity_index(len(open_permits)),
         )
 

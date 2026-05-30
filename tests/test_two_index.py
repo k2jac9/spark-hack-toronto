@@ -31,23 +31,39 @@ def test_activity_index_formula():
 
 
 def test_safety_index_formula():
-    # 1 - exp(-0.45 * adverse_visits), rounded to 3 dp.
-    assert safety_index(0) == 0.0
-    assert safety_index(1) == round(1 - math.exp(-0.45), 3) == 0.362
-    assert safety_index(2) == round(1 - math.exp(-0.9), 3) == 0.593
-    assert safety_index(1000) <= 1.0
-    assert safety_index(3) > safety_index(2) > safety_index(1)
+    # SEVERITY-WEIGHTED (ADR 0014 §6): 1 - exp(-0.45 * (0.3*minor + 1.0*severe)).
+    assert safety_index(0, 0) == 0.0
+    # Severe visits weigh 1.0 — same as the old unweighted count.
+    assert safety_index(0, 1) == round(1 - math.exp(-0.45), 3) == 0.362
+    assert safety_index(0, 2) == round(1 - math.exp(-0.9), 3) == 0.593
+    # Minor (Conditional Pass) visits weigh only 0.3.
+    assert safety_index(1, 0) == round(1 - math.exp(-0.45 * 0.3), 3) == 0.126
+    assert safety_index(2, 0) == round(1 - math.exp(-0.45 * 0.6), 3) == 0.237
+    # Saturating + monotone; a severe visit always outweighs a minor one.
+    assert safety_index(0, 1000) <= 1.0
+    assert safety_index(0, 1) > safety_index(1, 0)
 
 
 def test_negative_counts_are_clamped_to_zero():
     assert activity_index(-5) == 0.0
-    assert safety_index(-5) == 0.0
+    assert safety_index(-5, -5) == 0.0
+
+
+def test_minor_only_addresses_land_in_low_not_medium():
+    """The fix's whole point: an unweighted count made LOW structurally dead (1 visit
+    → 0.362 ≥ MEDIUM). Severity-weighting puts Conditional-only sites back in LOW."""
+    assert risk_band(safety_index(1, 0)) == "low"   # 0.126
+    assert risk_band(safety_index(2, 0)) == "low"   # 0.237
+    assert risk_band(safety_index(3, 0)) == "low"   # 0.347? check — see below
+    assert risk_band(safety_index(4, 0)) == "medium"  # 0.417
 
 
 def test_golden_100_queen_st_w():
-    """The new two-index golden: 2 open permits + 2 severe inspection VISITS."""
+    """The two-index golden survives severity weighting: 100 Queen St W has 2 open
+    permits + 2 SEVERE ('Fail') visits → severe weight 1.0 each, so safety is
+    unchanged from the unweighted count."""
     assert activity_index(2) == 0.113 and risk_band(activity_index(2)) == "low"
-    assert safety_index(2) == 0.593 and risk_band(safety_index(2)) == "medium"
+    assert safety_index(0, 2) == 0.593 and risk_band(safety_index(0, 2)) == "medium"
 
 
 # --------------------------------------------------------------------------- #
@@ -56,11 +72,11 @@ def test_golden_100_queen_st_w():
 def test_bands_per_index_are_independent():
     # none ≤ 0 < low < 0.34 ≤ medium < 0.67 ≤ high
     assert risk_band(activity_index(0)) == "none"
-    assert risk_band(activity_index(1)) == "low"        # 0.058
-    assert risk_band(safety_index(1)) == "medium"       # 0.362
-    # A high safety band needs several adverse visits.
-    assert risk_band(safety_index(2)) == "medium"       # 0.593
-    assert risk_band(safety_index(3)) == "high"         # 0.741
+    assert risk_band(activity_index(1)) == "low"          # 0.058
+    assert risk_band(safety_index(0, 1)) == "medium"      # 1 severe → 0.362
+    # A high safety band needs several severe visits.
+    assert risk_band(safety_index(0, 2)) == "medium"      # 0.593
+    assert risk_band(safety_index(0, 3)) == "high"        # 0.741
 
 
 def test_band_threshold_edges():
@@ -74,22 +90,26 @@ def test_band_threshold_edges():
 # Two-line deterministic narrative (ADR 0014 §8)                              #
 # --------------------------------------------------------------------------- #
 def test_two_line_narrative_has_both_axes():
-    out = two_line_narrative(adverse_visits=2, open_permits=2)
-    lines = out
-    assert "Food safety —" in lines
-    assert "Construction activity —" in lines
-    # Both counts appear verbatim (grounded — no invented numbers).
-    assert "2 inspection visits" in lines
-    assert "2 open permits" in lines
+    # 0 minor + 2 severe visits + 2 open permits (the 100 Queen St W shape).
+    out = two_line_narrative(minor_visits=0, severe_visits=2, open_permits=2)
+    assert "Food safety —" in out
+    assert "Construction activity —" in out
+    # Counts appear verbatim (grounded — no invented numbers) and severity is named.
+    assert "2 inspection visits (2 severe)" in out
+    assert "2 open permits" in out
 
 
 def test_two_line_narrative_wording_tracks_bands():
-    # 2 adverse visits → safety medium → "moderate"; 2 permits → activity low → "low".
-    out = two_line_narrative(2, 2)
+    # 2 severe visits → safety medium → "moderate"; 2 permits → activity low → "low".
+    out = two_line_narrative(0, 2, 2)
     assert "Food safety — moderate." in out
     assert "Construction activity — low." in out
+    # A Conditional-only site reads "moderate" wording but its 2 minors are not severe.
+    minor_only = two_line_narrative(2, 0, 0)
+    assert "2 inspection visits of concern" in minor_only  # no "(N severe)" note
+    assert "severe" not in minor_only
     # Clean site reads clear / low and singular/plural is correct.
-    clean = two_line_narrative(0, 1)
+    clean = two_line_narrative(0, 0, 1)
     assert "Food safety — clear. 0 inspection visits" in clean
     assert "Construction activity — low. 1 open permit." in clean
 
