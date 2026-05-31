@@ -268,15 +268,21 @@ def test_optimize_shape_is_pinned():
     assert set(body.keys()) == {
         "insight", "grounded", "figures", "optimization",
         "baseline_peak", "best_peak", "best_params", "savings",
-        "cost_breakdown", "baseline_cost_breakdown", "cross_domain",
+        "cost_breakdown", "baseline_cost_breakdown",
+        "cross_domain", "enabled", "combined_benefit",
     }
-    # Cross-domain extras: the same release scored across the Safety + Business
-    # lenses (computed separately). Tolerated as None, but well-formed if present.
+    # Cross-domain extras: the same release scored across the user-selected Safety +
+    # Business lenses. `cross_domain` carries only the enabled lenses (well-formed
+    # if present); `combined_benefit` = transit savings + the enabled contributions.
     cd = body["cross_domain"]
-    assert cd is None or (
-        cd["safety"]["best"] <= cd["safety"]["baseline"]
-        and cd["business"]["recovered"] >= 0
-    )
+    if cd:
+        if "safety" in cd:
+            assert cd["safety"]["best"] <= cd["safety"]["baseline"]
+        if "business" in cd:
+            assert cd["business"]["recovered"] >= 0
+    assert set(body["enabled"]) == {"safety", "business"}
+    assert isinstance(body["combined_benefit"], (int, float))
+    assert body["combined_benefit"] >= body["savings"]  # enabled lenses only add value
     assert isinstance(body["insight"], str) and body["insight"].strip()
     assert isinstance(body["grounded"], bool)
     assert isinstance(body["savings"], (int, float)) and body["savings"] > 0

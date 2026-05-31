@@ -134,6 +134,10 @@
     <div class="row">
       <button class="act" id="opt-btn" type="button">Find best intervention</button>
     </div>
+    <div class="row" id="lens-row" style="gap:14px;font-size:13px;margin-top:6px" aria-label="Lenses to value in the combined benefit">
+      <label><input type="checkbox" id="lens-safety" checked> Public safety</label>
+      <label><input type="checkbox" id="lens-business" checked> Local business</label>
+    </div>
     <div id="opt-out" aria-live="polite"></div>
 
     <div id="status" class="hint" role="status" aria-live="polite" style="margin-top:12px">Loading…</div>
@@ -420,23 +424,32 @@
       optOut.classList.remove('stale');  // fresh run is never stale
       optOut.innerHTML = '<p class="hint"><span class="spinner"></span>Searching levers + writing the briefing…</p>';
       try {
-        const d = await (await fetch('/optimize')).json();
+        // The user picks which cross-domain lenses to value — the toggles change
+        // the combined benefit (and which rows show). The core transit optimization
+        // is identical; this is "the user uses the lenses," literally.
+        const wantSafety = document.getElementById('lens-safety').checked;
+        const wantBusiness = document.getElementById('lens-business').checked;
+        const d = await (await fetch('/optimize?safety=' + (wantSafety ? 1 : 0) +
+                                     '&business=' + (wantBusiness ? 1 : 0))).json();
         const bp = d.baseline_peak, sp = d.best_peak;
         const relMin = d.best_params.release_minutes != null ? d.best_params.release_minutes : 0;
         const shelFrac = d.best_params.shelter_fraction != null ? d.best_params.shelter_fraction : 0;
         const shelPct = Math.round(shelFrac * 100);
         const cb = d.cost_breakdown || {};
-        // The same recommended release, scored across the other two lenses
-        // (civic-Safety + Business-Flow) — computed server-side without changing
-        // the optimizer above. The "one lever, every lens" story.
-        const cd = d.cross_domain;
-        const cdHtml = cd ?
-          '<div class="lbl">Cross-domain — the same release, every lens</div>' +
-          '<table class="breakdown" aria-label="Cross-domain impact of the recommended release"><tbody>' +
-          '<tr><td>Public safety (civic risk × crush)</td><td>' +
-            dollarsK(cd.safety.baseline) + ' → ' + dollarsK(cd.safety.best) + '</td></tr>' +
-          '<tr><td>Local business recovered</td><td>+' + dollarsK(cd.business.recovered) + '</td></tr>' +
-          '</tbody></table>' : '';
+        // The same recommended release, scored across the lenses the user selected.
+        const cd = d.cross_domain || {};
+        let cdRows = '';
+        if (cd.safety) cdRows += '<tr><td>Public safety (civic risk × crush)</td><td>' +
+          dollarsK(cd.safety.baseline) + ' → ' + dollarsK(cd.safety.best) + '</td></tr>';
+        if (cd.business) cdRows += '<tr><td>Local business recovered</td><td>+' +
+          dollarsK(cd.business.recovered) + '</td></tr>';
+        const cdHtml =
+          '<div class="lbl">Cross-domain — the lenses you value (toggle above)</div>' +
+          (cdRows
+            ? '<table class="breakdown" aria-label="Cross-domain impact of the recommended release"><tbody>' +
+              cdRows + '</tbody></table>'
+            : '<p class="hint">No cross-domain lenses selected — transit only.</p>') +
+          '<div class="save">Combined benefit ' + dollarsK(d.combined_benefit) + '</div>';
         optOut.innerHTML =
           '<div class="superseded" id="opt-superseded" style="display:none">⚠ superseded — re-run to refresh (levers moved off the recommendation)</div>' +
           '<div class="insight"><span class="tag ' + (d.grounded ? 'grounded">✓ grounded' : 'fallback">⚠ template') +
@@ -466,6 +479,13 @@
         optBtn.disabled = false;
       }
     });
+
+    // Toggling a lens re-runs the optimize with the new selection (only if a
+    // result is already shown) — the user picks which lenses count.
+    ['lens-safety', 'lens-business'].forEach((id) =>
+      document.getElementById(id).addEventListener('change', () => {
+        if (optOut.innerHTML.trim() && !optBtn.disabled) optBtn.click();
+      }));
 
     map.on('load', async () => {
       try {

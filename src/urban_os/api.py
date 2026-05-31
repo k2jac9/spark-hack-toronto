@@ -316,9 +316,16 @@ def _cross_domain(sc, best_params: dict) -> dict:
 
 
 @app.get("/optimize")
-def optimize_endpoint() -> dict:
+def optimize_endpoint(
+    safety: bool = Query(True), business: bool = Query(True)
+) -> dict:
     """Run the lever optimizer + the cited narrator and return everything the UI
-    needs for the before/after panel (insight sentence, peaks, savings, levers)."""
+    needs for the before/after panel (insight sentence, peaks, savings, levers).
+
+    ``safety``/``business`` toggle whether each cross-domain lens counts toward the
+    reported ``combined_benefit`` (and appears in ``cross_domain``) — so the user
+    picks which urban concerns to value. The core transit optimization is identical
+    regardless; only the reported combined benefit changes with the toggles."""
     sc = _scenario()
     lenses = _lenses(sc)
     try:
@@ -342,9 +349,8 @@ def optimize_endpoint() -> dict:
         # safety/total), not just the headline saving.
         "cost_breakdown": best_breakdown,
         "baseline_cost_breakdown": baseline_breakdown,
-        # The same release, scored across the other two lenses (computed separately
-        # so the optimizer + breakdown above are unchanged). None if it can't run.
-        "cross_domain": _cross_domain_safe(sc, opt.best_params),
+        # The same release, scored across the user-selected cross-domain lenses.
+        **_cross_domain_block(sc, opt.best_params, opt.savings, safety, business),
     }
 
 
@@ -354,3 +360,26 @@ def _cross_domain_safe(sc, best_params: dict):
         return _cross_domain(sc, best_params)
     except Exception:
         return None
+
+
+def _cross_domain_block(sc, best_params: dict, savings: float,
+                        safety: bool, business: bool) -> dict:
+    """Cross-domain panel data filtered by the user's lens toggles, plus the
+    combined benefit = transit savings + the ENABLED lenses' contributions. The
+    user turning a lens off literally removes its dollars from the combined J."""
+    full = _cross_domain_safe(sc, best_params)
+    combined = float(savings)
+    cd = None
+    if full:
+        cd = {}
+        if safety and full.get("safety"):
+            cd["safety"] = full["safety"]
+            combined += full["safety"]["baseline"] - full["safety"]["best"]
+        if business and full.get("business"):
+            cd["business"] = full["business"]
+            combined += full["business"]["recovered"]
+    return {
+        "cross_domain": cd,
+        "enabled": {"safety": bool(safety), "business": bool(business)},
+        "combined_benefit": _r(combined, 2),
+    }

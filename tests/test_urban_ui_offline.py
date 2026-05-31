@@ -167,7 +167,8 @@ def test_calls_the_three_same_origin_endpoints(page: str) -> None:
     """The UI consumes /scenario, /simulate and /optimize (same-origin paths)."""
     assert "fetch('/scenario')" in page or 'fetch("/scenario")' in page
     assert "/simulate?release_minutes=" in page
-    assert "fetch('/optimize')" in page or 'fetch("/optimize")' in page
+    # /optimize is same-origin; it now carries the lens-toggle query (?safety&business).
+    assert "fetch('/optimize" in page or 'fetch("/optimize' in page
 
 
 def test_release_lever_recalls_simulate(page: str) -> None:
