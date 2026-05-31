@@ -1,5 +1,5 @@
-.PHONY: install install-hooks data serve cli test demo demo-public funnel-off demo-cli demo-data \
-        urbanos urbanos-cli urbanos-accel urbanos-bench screenshot
+.PHONY: install install-hooks data serve cli test demo demo-public funnel-off funnel-off-all \
+        demo-cli demo-data urbanos urbanos-cli urbanos-accel urbanos-bench screenshot
 
 # demo  -> real downtown-Toronto slice (demo_data/), pins land on the offline map.
 # demo-cli/tests -> synthetic, deterministic fixtures/.
@@ -56,10 +56,18 @@ demo-public:
 	echo "  LOCAL:  http://localhost:8000/"; \
 	DATA_DIR=$(DEMO_DATA) $(PYTHON) -m uvicorn civic_analyst.api.server:app --port 8000 --app-dir src
 
-# Reliably take the public demo URL down (Funnel off). Run after a public demo.
+# Reliably take the civic_analyst public demo URL down (Funnel :443 off). Run after a public demo.
 funnel-off:
-	@tailscale funnel --https=443 off 2>/dev/null && echo "Funnel off — public URL is down." \
+	@tailscale funnel --https=443 off 2>/dev/null && echo "Funnel off — civic_analyst public URL is down." \
 	  || echo "Funnel was not on (or tailscale unavailable)."
+
+# Take BOTH public demo URLs down: civic_analyst (:443->:8000) AND urban_os (:8443->:8001).
+# Use this on the box when wrapping up — the urban_os Funnel isn't covered by `make funnel-off`.
+funnel-off-all:
+	@tailscale funnel --https=443 off 2>/dev/null && echo "Funnel off — civic_analyst (:443) public URL is down." \
+	  || echo "civic_analyst Funnel was not on (or tailscale unavailable)."
+	@tailscale funnel --https=8443 off 2>/dev/null && echo "Funnel off — urban_os (:8443) public URL is down." \
+	  || echo "urban_os Funnel was not on (or tailscale unavailable)."
 
 # Rebuild the real downtown slice from the live dataset.
 demo-data:

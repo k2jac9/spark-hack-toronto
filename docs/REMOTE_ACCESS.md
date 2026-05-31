@@ -11,16 +11,20 @@ Access path is **Tailscale** (encrypted mesh VPN, no router/port-forward config)
 
 SSH is **never** exposed to the public internet; Ollama stays bound to `localhost`.
 
-> **Live values** (this tailnet — none of these are secrets; the Funnel URL is meant to be public,
+> **Live values** (this tailnet — none of these are secrets; the Funnel URLs are meant to be public,
 > the `100.x` IP only resolves inside the tailnet):
 > - Tailnet name: `taila9fe06.ts.net`
 > - Box tailnet IP: `100.73.241.60`
 > - MagicDNS name: `gx10-4428` (short) / `gx10-4428.taila9fe06.ts.net` (full)
-> - **Public demo URL (Funnel): https://gx10-4428.taila9fe06.ts.net** ← share with judges
+> - **Public demo URLs (Funnel)** ← share with judges:
+>   - **civic_analyst (`:8000`): https://gx10-4428.taila9fe06.ts.net**
+>   - **urban_os (`:8001`): https://gx10-4428.taila9fe06.ts.net:8443** (the flagship; Funnel maps `:8443`→`:8001`)
 >
-> Turn the public URL **off** when the demo's done: `tailscale funnel --https=443 off`.
+> Turn **both** public URLs off when the demo's done: `make funnel-off-all` (on the box).
 
-Box identity: user **`asus`**, hostname **`gx10-4428`**, LAN IP `10.10.52.82` (venue wifi; LAN-only).
+Box identity: Linux user **`asus`**, hostname **`gx10-4428`**, LAN IP `10.10.52.82` (venue wifi; LAN-only).
+The box is **tagged** (`tag:demo`) in the tailnet, so it shows as `tagged-devices` in `tailscale status`
+(not owned by a personal account) — SSH access comes from the `tag:demo` grant, not personal ownership.
 
 ---
 
@@ -28,18 +32,24 @@ Box identity: user **`asus`**, hostname **`gx10-4428`**, LAN IP `10.10.52.82` (v
 
 ```bash
 # From any device signed into the same tailnet:
-ssh asus@gx10-4428                      # Tailscale SSH (or: ssh asus@100.x.y.z)
+ssh asus@gx10-4428                      # Tailscale SSH (or: ssh asus@100.73.241.60)
 
-# Bring the demo up AND flip the public URL on, in one command (on the box):
-ssh asus@gx10-4428 'cd ~/dev/spark-hack-toronto && . .venv/bin/activate && make demo-public'
-#   → https://gx10-4428.taila9fe06.ts.net   (public, read-only)
+# Both apps already run as systemd user services on the box (see §4) and both Funnels are on.
+# After a `git pull` on the box, just restart the services so the live demo matches the repo:
+ssh asus@gx10-4428 'systemctl --user restart civic-demo urbanos-demo'
 
-# Take the public URL back down when you're done:
-ssh asus@gx10-4428 'cd ~/dev/spark-hack-toronto && make funnel-off'
+# Public, read-only URLs (no setup needed if the services + Funnels are up):
+#   civic_analyst → https://gx10-4428.taila9fe06.ts.net
+#   urban_os      → https://gx10-4428.taila9fe06.ts.net:8443
+
+# Take BOTH public URLs back down when you're done:
+ssh asus@gx10-4428 'cd ~/dev/spark-hack-toronto && make funnel-off-all'
 ```
 
-**`make demo` = local only** (no public URL) · **`make demo-public` = local + public Funnel** ·
-**`make funnel-off` = guaranteed teardown** (the Ctrl-C trap is best-effort).
+**`make demo` = local only** (no public URL) · **`make demo-public` = local + public Funnel for `:8000`** ·
+**`make funnel-off` = teardown of the `:8000`/`:443` Funnel only** ·
+**`make funnel-off-all` = teardown of BOTH** (civic_analyst `:443` + urban_os `:8443`).
+The Ctrl-C trap in `make demo-public` is best-effort.
 
 ---
 
@@ -68,14 +78,14 @@ Funnel = the public demo URL. One-time, browser-only:
    Paste the whole file, or just add that block alongside your existing `grants` and `ssh`.
    (Newer tailnets also expose a per-machine **Funnel** toggle in the machine's `⋯` menu.)
 
-> **SSH already works** with the default `ssh` rule (`autogroup:member` → `autogroup:self`,
-> `check` mode) because the box is registered under your account — no change needed for SSH.
-> - `check` mode re-prompts for browser auth ~every 12h; switch to `"action": "accept"` for a
->   frictionless demo.
-> - That rule only allows SSH into devices **you own**. For teammates on their **own** Tailscale
->   accounts, tag the box (`tag:demo`) and grant the team SSH to it — see the commented
->   *OPTIONAL* block in [`tailscale-policy.hujson`](./tailscale-policy.hujson), then bring the box
->   up with `sudo tailscale up --ssh --advertise-tags=tag:demo`.
+> **SSH is set up via the `tag:demo` grant** (the box is *tagged*, not owned by a personal
+> account — it shows as `tagged-devices` in `tailscale status`). The team's SSH access to it
+> comes from the `tag:demo` SSH grant in [`tailscale-policy.hujson`](./tailscale-policy.hujson),
+> and the box was brought up with `sudo tailscale up --ssh --advertise-tags=tag:demo`.
+> - This lets **teammates on their own Tailscale accounts** SSH into the box (a personal-ownership
+>   rule like `autogroup:member` → `autogroup:self` would only cover devices *you* own).
+> - If you use `check` mode it re-prompts for browser auth ~every 12h; switch to
+>   `"action": "accept"` for a frictionless demo.
 
 ### 3. Expose the demo publicly — one command
 ```bash
@@ -88,12 +98,15 @@ make funnel-off           # take the public URL back down (reliable teardown)
 policy attr, it just serves locally. Requires `sudo tailscale set --operator=$USER` once so
 the Makefile can manage Funnel without sudo.
 
-Under the hood (if you'd rather do it by hand):
+Under the hood (if you'd rather do it by hand). **Both apps are published** — civic_analyst on the
+default HTTPS port (`:443`) and urban_os on `:8443`:
 ```bash
-make demo                          # local server on :8000 (no public URL)
-tailscale funnel --bg 8000         # publish :8000 publicly over HTTPS
-tailscale serve  --bg 8000         # ...or serve it PRIVATELY on the tailnet only
-tailscale funnel --https=443 off   # turn the public URL off
+make demo                              # local civic_analyst on :8000 (no public URL)
+tailscale funnel --bg 8000             # publish :8000 publicly on https://…  (→ :443)
+tailscale funnel --bg --https=8443 8001  # publish urban_os :8001 publicly on https://…:8443
+tailscale serve  --bg 8000             # ...or serve it PRIVATELY on the tailnet only
+tailscale funnel --https=443 off       # turn the civic_analyst public URL off
+tailscale funnel --https=8443 off      # turn the urban_os public URL off
 ```
 
 ### 4. Keep the demo up across reboots (systemd user service)
@@ -124,18 +137,23 @@ UNIT
 systemctl --user daemon-reload
 systemctl --user enable --now civic-demo.service     # start now + on every boot
 ```
-Manage / inspect it:
+The box runs **two** such user services (both `active`, with linger enabled):
+- **`civic-demo.service`** — civic_analyst, uvicorn on `:8000`.
+- **`urbanos-demo.service`** — urban_os, uvicorn on `:8001` (local-only; reached via the `:8443` Funnel).
+
+Manage / inspect them (act on both at once by listing both unit names):
 ```bash
-systemctl --user status civic-demo        # is it running?
-systemctl --user restart civic-demo       # e.g. after a `git pull`
-systemctl --user stop civic-demo          # free :8000 to run `make demo` by hand
-journalctl --user -u civic-demo -f        # live logs
+systemctl --user status civic-demo urbanos-demo     # are they running?
+systemctl --user restart civic-demo urbanos-demo    # e.g. after a `git pull` on the box
+systemctl --user stop civic-demo                    # free :8000 to run `make demo` by hand
+journalctl --user -u civic-demo -f                  # live logs (swap unit name for urban_os)
 ```
 Notes:
-- The unit serves **local-only** (`:8000`); Funnel still publishes it — so `make funnel-off`
-  is still how you take the **public** URL down. The service keeps `:8000` alive underneath.
-- To run `make demo`/`make demo-public` by hand, `stop` the service first (avoids a `:8000` clash).
-- This is a CORE-demo safety net, not a CI-gated artifact — it lives on the box, not in the repo.
+- The units serve **local-only** (`:8000` / `:8001`); Funnel publishes them — so the
+  `tailscale funnel … off` commands above are how you take the **public** URLs down. The
+  services keep the local ports alive underneath.
+- To run `make demo`/`make demo-public` by hand, `stop` the matching service first (avoids a port clash).
+- These are CORE-demo safety nets, not CI-gated artifacts — they live on the box, not in the repo.
 
 ---
 
@@ -188,22 +206,27 @@ Then just: `ssh gx10`.
 
 ## Verify
 ```bash
-tailscale status                                        # box + your devices listed, online
-ssh asus@gx10-4428 'hostname'                           # → gx10-4428
-curl -s https://gx10-4428.taila9fe06.ts.net/health      # → {"status":"ok",...}  (verified working)
+tailscale status                                          # box (tagged-devices) + your devices, online
+ssh asus@gx10-4428 'hostname'                             # → gx10-4428
+curl -s https://gx10-4428.taila9fe06.ts.net/health        # civic_analyst → {"status":"ok",...}  (verified)
+curl -s https://gx10-4428.taila9fe06.ts.net:8443/health   # urban_os      → {"status":"ok",...}  (verified)
 ```
 
 ## Security posture
-- **SSH**: tailnet-only (Tailscale SSH) + key fallback. Never funneled to the public internet.
-- **Funnel**: exposes only the **read-only** demo app (GET `/`, `/analyze`, `/digest`, `/addresses`, `/health`). No mutations, no secrets, no auth needed for the public demo.
+- **SSH**: tailnet-only (Tailscale SSH via the `tag:demo` grant) + key fallback. Never funneled to the public internet.
+- **Funnel**: exposes only the **read-only** demo apps — civic_analyst on `:443` (GET `/`, `/analyze`, `/digest`, `/addresses`, `/health`) and urban_os on `:8443`. No mutations, no secrets, no auth needed for the public demo.
 - **Ollama** (`:11434`) and the **memory/db** stay bound to `localhost` — never exposed.
-- Turn off the public URL the moment the demo's over: `tailscale funnel --bg off`.
+- Turn off **both** public URLs the moment the demo's over: `make funnel-off-all`
+  (or `tailscale funnel --https=443 off && tailscale funnel --https=8443 off`).
 
 ## Troubleshooting
 - `tailscale status` says *Logged out* → re-run `sudo tailscale up --ssh`.
 - Funnel error *"Funnel not available"* → finish admin-console step 2 (HTTPS certs + `funnel` nodeAttr).
-- Public URL 502 → the demo server isn't running. If the `civic-demo` service is installed:
-  `systemctl --user status civic-demo` (restart with `systemctl --user restart civic-demo`);
-  otherwise start `make demo` on the box. See *Keep the demo up across reboots* above.
+- Public URL 502 → the matching demo server isn't running. Check the service for that URL
+  (`systemctl --user status civic-demo urbanos-demo`; restart with
+  `systemctl --user restart civic-demo urbanos-demo`); otherwise start `make demo` on the box.
+  See *Keep the demo up across reboots* above.
+- urban_os URL (`:8443`) unreachable but civic is fine → that Funnel is managed by hand, not by
+  `make funnel-off`. Re-publish it: `tailscale funnel --bg --https=8443 8001`.
 - Can't SSH over tailnet → confirm the **client** is signed into the **same tailnet** (`tailscale status` on the client).
 - LAN SSH only (no Tailscale): `ssh asus@10.10.52.82` — works only on the same wifi.
