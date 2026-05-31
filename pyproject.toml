@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+# Put src/ on the import path so a bare `pytest` from the repo root works without
+# callers remembering `PYTHONPATH=src`. The Makefile still sets PYTHONPATH=src;
+# this just makes the plain invocation work too. testpaths scopes collection.
+pythonpath = ["src"]
+testpaths = ["tests"]

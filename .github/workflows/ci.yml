@@ -1,18 +1,56 @@
-  name: CI
-  on:
-    push:
-      branches: [main]
-    pull_request:
-  jobs:
-    test:
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v6
-        - uses: actions/setup-python@v6
-          with: 
-            python-version: "3.12"
-            cache: pip
-        - name: Install dependencies
-          run: pip install -r requirements.txt
-        - name: Run tests
-          run: PYTHONPATH=src pytest -q
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  # Floating requirements across a Python version matrix. 3.12 is the box/Docker
+  # target (see Dockerfile); the extra leg guards against a stdlib/dep drift the
+  # pinned set would hide.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run tests
+        run: PYTHONPATH=src pytest -q
+
+  # Verify the pinned/locked dependency set the box deploys from actually resolves
+  # and passes — requirements.txt is floating, requirements.lock is what ships.
+  test-locked:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install pinned dependencies
+        run: pip install -r requirements.lock
+      - name: Run tests
+        run: PYTHONPATH=src pytest -q
+
+  # Enforce the ARM64-only invariant (CLAUDE.md): the GX10 image must build for
+  # linux/arm64. Build-only (push:false) — this is a gate, not a publish.
+  docker-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ARM64 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: false
+          tags: civic-analyst:ci

@@ -71,9 +71,11 @@ Layout: `src/civic_analyst/{ingest,graph,agents,api}`, `tests/`, `scripts/`, `de
 - **`urban_os` (`:8001`)** — the flagship: a simulation **kernel** (substrate + time loop + the four
   operators) with **four lenses** — EventSurge · Economic · **Safety (the civic risk app, made a
   *literal* kernel lens)** · **BusinessFlow** — and an optimizer. One staggered-release lever
-  (`make urbanos-cli`: 14-min / **−62% peak** / ~$60k transit) is scored across all lenses:
-  **~$116k** combined (transit + public safety + local business). The UI has a **cross-domain panel
-  + lens toggles** (☑ Public safety ☑ Local business — the user picks which lenses count).
+  (`make urbanos-cli`: Union Station 3.73× capacity @ t=47min; do-nothing J $323,222 → best
+  release at **14min → J $105,050**, **saves ~$218k**, **peak cut 67%**) is scored across all
+  lenses (transit + public safety + local business). The UI has a **cross-domain panel + lens
+  toggles** (☑ Public safety ☑ Local business — the user picks which lenses count).
+  **For live numbers defer to README** (it is the source of truth).
 
 **NemoClaw / MCP bounty — DONE & verified on the box** (no longer "optional/left"): a local
 Nemotron agent calls our `toronto-civic` MCP tools and answers **grounded** (matched the tool
@@ -90,9 +92,11 @@ user service (linger + Restart=always); the public judge URL is the Tailscale Fu
 (Safety + Activity, ADR-0014)** — 500 Bloor reads **medium Activity / low Safety**, *not* the old
 "0.92 high"; for a genuinely **high** pin use **40 Bay St** or **1 Blue Jays Way** (high Activity,
 permit-heavy). Flip **◢ Presentation** for the 3D building; on `:8001` use **lens toggles** to show
-"one lever, every lens." ⚠ **Numbers differ by surface:** `make urbanos-cli` (no weather) ≈ 14-min /
-−62% / ~$116k combined; the **`:8001` UI** includes the **WeatherLens/shelter lever** (ADR-0007) so
-it shows ≈ 16-min / ~$142k — cite whichever surface you're showing, not both. Real-data slices are
+"one lever, every lens." ⚠ **Numbers differ by surface (defer to README for live figures):**
+`make urbanos-cli` (no weather) ≈ **14-min release → J $105,050, saves ~$218k, peak cut 67%**
+(do-nothing J $323,222); the **`:8001` UI** includes the **WeatherLens/shelter lever** (ADR-0007)
+so its combined number is larger (≈ **16-min / 80% / ~$455k**) — cite whichever surface you're
+showing, not both. Real-data slices are
 committed; regenerate with `make demo-data` (needs the `pmtiles` CLI via `scripts/build_tiles.sh`).
 First-clone setup: `python -m venv .venv && . .venv/bin/activate` → `make install` →
 `make install-hooks` → `cp .env.example .env`.
