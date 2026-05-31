@@ -54,26 +54,33 @@ For a bigger box, `LLM_BATCH_MODEL=nemotron-3-super` gives a stronger digest (�
 Why these models: decode is **memory-bound** (`tok/s ≈ 190 GB/s ÷ active-bytes`), so
 MoE/small-active + FP4 is the only responsive choice. Dense 70B ≈ 2.7 tok/s (avoid).
 
-## 2b. (Stretch, ADR-0027) Serve Nemotron via **TensorRT-LLM** for a real decode speedup
+## 2b. (Stretch, ADR-0027) Serve Nemotron via **TensorRT-LLM** — capability, *not* a speedup
 The narrator client only speaks OpenAI-compatible HTTP, so swapping Ollama for NVIDIA
-**TensorRT-LLM** is a *config* change — no app code changes. This is the **one seam with a
-genuine, on-camera decode speedup** (warm tok/s vs Ollama), the "real number on screen" the
-rubric wants.
+**TensorRT-LLM** is a *config* change — no app code changes. **This was brought up live on
+the box** (2026-05-31): Nemotron-3-Nano (NVFP4 / Blackwell FP4) serving via the NGC container.
+⚠️ **Use the NGC container, not bare-metal pip** — bare-metal aarch64 hits an unfixable
+torch-C++-ABI wall (see ADR-0027 "Box verification").
 ```bash
-# 0) Install TRT-LLM on the box (aarch64/Grace) — pip or the NGC container:
-pip install --extra-index-url https://pypi.nvidia.com tensorrt-llm
-# 1) Stand up an OpenAI-compatible TRT-LLM server (builds + caches the engine on first run):
-bash scripts/serve_trtllm.sh                 # serves http://localhost:8009/v1
-# 2) Point the app at it (the ONLY change) and prove the runtime + speedup:
+# Image + ungated NVFP4 checkpoint already staged under ~/trt-build on the box.
+cat > ~/trt-build/options.yaml <<'EOF'
+kv_cache_config:
+  enable_block_reuse: false   # REQUIRED for the nemotron_h Mamba-hybrid KV cache
+EOF
+docker run -d --name trtllm-serve --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
+  -p 8009:8009 -v ~/trt-build:/work nvcr.io/nvidia/tensorrt-llm/release:1.2.1 \
+  trtllm-serve /work/models/nemotron-nano-nvfp4 --host 0.0.0.0 --port 8009 \
+  --backend pytorch --extra_llm_api_options /work/options.yaml
+# point the app at it + prove which runtime answered (capability, not a speed claim):
 export LLM_RUNTIME=tensorrt-llm LLM_BASE_URL=http://localhost:8009/v1
-make llm-check                                # expect runtime='tensorrt-llm' + tok/s
-systemctl --user restart civic-demo          # so :8000 narrates via TRT-LLM
+make llm-check                                # expect runtime='tensorrt-llm'
+docker stop trtllm-serve                       # ⚠️ stop when done — holds ~19 GB unified mem (OOM risk to live demo)
 ```
-**Honesty / fallback:** verify your Nemotron variant is a TRT-LLM-supported architecture
-*before* relying on it. If the engine build doesn't land in time, **keep Ollama** — the app
-needs no change (the seam is opt-in, `LLM_RUNTIME` defaults to `ollama`), and the
-deterministic narrator still backs everything. Claim the **tok/s from `make llm-check`**,
-never a number you can't reproduce live.
+**Honesty / fallback (read before claiming anything):** TRT-LLM **is** serving Nemotron here
+(capability — true), but **measured single-stream decode is NOT faster than Ollama** (54.5 vs
+61.2 tok/s). **Do not claim a decode speedup.** Claim only *"Nemotron runs on TensorRT-LLM on
+the box, runtime-portable narrator."* The throughput-under-load advantage is unproven (next-
+step; full plan in ADR-0027). The live demo defaults to `LLM_RUNTIME=ollama` and is never
+blocked. **Do not swap the live `civic-demo` to TRT-LLM during judging** (memory + no speed win).
 
 > **PhysicsNeMo (Modulus) — interface only, no box step.** The optimizer's surrogate seam
 > (`urban_os/surrogate.py`, `URBANOS_SURROGATE=1`) ships *without* a trained checkpoint, so

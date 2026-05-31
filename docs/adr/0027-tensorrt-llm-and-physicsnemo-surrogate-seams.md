@@ -41,10 +41,13 @@ blocked), backend recorded, proof script (`make llm-check`, plus a surrogate lin
 
 ## Honesty notes (the #1 credibility rule)
 
-- **TensorRT-LLM is real and demoable** — but it needs a per-model **engine build** on
-  the box (aarch64/Grace for the GB10), not a pure pip step. Claim the capability + the
-  decode-speedup number from `make llm-check`; don't claim a benchmark you can't
-  reproduce on camera.
+- **TensorRT-LLM is real and box-proven — as a *capability*, NOT a speedup.** It is
+  wired and was stood up on the GB10 (see "Box verification" below): Nemotron-3-Nano
+  (NVFP4 / Blackwell FP4) served via the NGC `tensorrt-llm` container, OpenAI-compatible,
+  Ollama fallback. **Measured single-stream decode is NOT faster than Ollama (54.5 vs
+  61.2 tok/s).** Claim only the capability ("Nemotron runs on TensorRT-LLM on the box,
+  runtime-portable narrator") — **never a decode speedup.** TRT-LLM's real edge is
+  throughput under concurrent load, which is **not yet cleanly measured** (next step).
 - **PhysicsNeMo ships as an INTERFACE ONLY.** There is no trained checkpoint, so the
   exact kernel decides every result today — identical to the pure grid. A learned
   surrogate is a *black box*, which is why it never touches the decision (only the
@@ -60,4 +63,43 @@ network; a `LocalLLM` carries a `runtime` override; the surrogate is off by defa
 `load()` returns None without a checkpoint; `optimize()` reports `surrogate_backend=none`
 and leaks no `J_surrogate` into trials, with `best` unchanged. `make llm-check` reports
 the runtime (or an honest offline result); `make gpu-check` reports the surrogate seam.
-Full suite: **417 passed**, 1 skipped, 1 xfailed.
+Full suite: **439 passed**, 1 skipped, 1 xfailed.
+
+## Box verification — TensorRT-LLM stood up on the GB10 (2026-05-31)
+
+We actually brought TRT-LLM up on the box. Summary, so the next session resumes fast:
+
+**What works (verified live):** Nemotron-3-Nano served via TensorRT-LLM, OpenAI-compatible,
+returning real completions (`owned_by: tensorrt_llm`). The `nemotron_h` (Mamba2-hybrid)
+arch **is** servable. Bare-metal pip is a dead end on aarch64 (CPU-only torch → libpython →
+cudnn/cu13 deps → libmpi → an unfixable **torch-C++-ABI mismatch** in TRT-LLM's prebuilt
+binaries). **Use the NGC container**, where torch + MPI + TRT-LLM are ABI-matched.
+
+**Exact working recipe (on `asus@gx10-4428`):**
+```bash
+# image (arm64) + ungated NVFP4 checkpoint already on the box under ~/trt-build:
+#   nvcr.io/nvidia/tensorrt-llm/release:1.2.1
+#   ~/trt-build/models/nemotron-nano-nvfp4  (nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4)
+#   ~/trt-build/options.yaml  ->  kv_cache_config: { enable_block_reuse: false }   # REQUIRED for Mamba-hybrid
+docker run -d --name trtllm-serve --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
+  -p 8009:8009 -v ~/trt-build:/work nvcr.io/nvidia/tensorrt-llm/release:1.2.1 \
+  trtllm-serve /work/models/nemotron-nano-nvfp4 --host 0.0.0.0 --port 8009 \
+  --backend pytorch --extra_llm_api_options /work/options.yaml
+# ⚠️ stop it when done — the model holds unified memory (dropped box to ~4 GB free, OOM risk to the live demo):
+docker stop trtllm-serve
+```
+
+**Honest measured result (single-stream, same prompt/model):** TRT-LLM **54.5 tok/s** vs
+Ollama **61.2 tok/s** → **TRT-LLM is ~11% slower single-stream. No decode speedup.** This is
+why the claim is *capability only*.
+
+**Next step — prove (or refute) the throughput win (the real TRT-LLM value prop):**
+- Tune `trtllm-serve`: raise `--max_batch_size` / `--max_num_tokens`, size the KV cache; the
+  defaults left the Mamba-hybrid conservative.
+- Write a *correct* concurrent benchmark (the first attempt threw HTTP 400s — likely a per-
+  request body/limit issue; use an async client, catch per-request errors, ramp concurrency
+  1→4→8→16→32, report **aggregate** tok/s = Σtokens / wall).
+- Compare against Ollama under matched concurrency (set `OLLAMA_NUM_PARALLEL`), but do the
+  Ollama load-test **off** judging hours (it touches the live demo).
+- Watch unified memory (`free -g`): the box is 121 GB shared; stop the container between runs.
+- If a real aggregate-throughput win exists, *that* is the honest claim — never single-stream.

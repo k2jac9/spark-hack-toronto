@@ -102,9 +102,11 @@ the tiny demo substrate — same as the Rust accelerator (ADR-0009).
   deterministic numpy KMeans CPU fallback.
 - **TensorRT-LLM** — the narrator client is runtime-agnostic (OpenAI-compatible HTTP), so
   serving Nemotron behind `trtllm-serve` is a *config* swap: `LLM_RUNTIME=tensorrt-llm` +
-  point `LLM_BASE_URL` at it. `make llm-check` reports the runtime + a real decode tok/s —
-  the one seam with an on-GPU speedup (needs a box-side engine build). Falls back to
-  Ollama / the deterministic narrator. (ADR-0027)
+  point `LLM_BASE_URL` at it. `make llm-check` reports which runtime answered. **Box-proven**
+  on the GB10 (Nemotron-3-Nano NVFP4 served via the NGC TRT-LLM container). **Capability, not
+  a speedup**: measured single-stream decode is *not* faster than Ollama (54.5 vs 61.2 tok/s,
+  ADR-0027); a throughput-under-load win is unproven (next-step). Falls back to Ollama / the
+  deterministic narrator. (ADR-0027)
 - **PhysicsNeMo (Modulus)** — a neural **surrogate of the optimizer objective `J(levers)`**
   for *city-scale* search (`urban_os/surrogate.py`, `URBANOS_SURROGATE=1`). Shipped as an
   **interface only**: the exact kernel still decides every result (the surrogate's
