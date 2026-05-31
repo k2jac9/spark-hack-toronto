@@ -86,8 +86,13 @@ the repo (the box still serves the *old* Urban-OS numbers). The civic-demo `:800
 user service (linger + Restart=always); the public judge URL is the Tailscale Funnel
 `https://gx10-4428.taila9fe06.ts.net`. Optional stretch: QLoRA fine-tune.
 
-**Demo tips:** civic hero pin **500 Bloor St W** (3-dataset fusion); flip **◢ Presentation** for the
-3D building; on `:8001` use **lens toggles** to show "one lever, every lens." Real-data slices are
+**Demo tips:** civic hero pin **500 Bloor St W** (3-dataset fusion). NB scoring is **two-index now
+(Safety + Activity, ADR-0014)** — 500 Bloor reads **medium Activity / low Safety**, *not* the old
+"0.92 high"; for a genuinely **high** pin use **40 Bay St** or **1 Blue Jays Way** (high Activity,
+permit-heavy). Flip **◢ Presentation** for the 3D building; on `:8001` use **lens toggles** to show
+"one lever, every lens." ⚠ **Numbers differ by surface:** `make urbanos-cli` (no weather) ≈ 14-min /
+−62% / ~$116k combined; the **`:8001` UI** includes the **WeatherLens/shelter lever** (ADR-0007) so
+it shows ≈ 16-min / ~$142k — cite whichever surface you're showing, not both. Real-data slices are
 committed; regenerate with `make demo-data` (needs the `pmtiles` CLI via `scripts/build_tiles.sh`).
 First-clone setup: `python -m venv .venv && . .venv/bin/activate` → `make install` →
 `make install-hooks` → `cp .env.example .env`.

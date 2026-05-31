@@ -17,10 +17,13 @@ no hallucinated numbers**.
 > "Everything you'll see runs **100% on this GX10** — no cloud, no tile server, no
 > internet. Watch — I'll unplug it. *[unplug]*
 >
-> First, the **Safety lens**. This is downtown Toronto, offline. Every pin is a
-> real address, risk-scored. I click **500 Bloor St West** — risk **0.92, high**.
-> But every claim is grounded: it cites failed inspections, open permits, a
-> licence — across **three real City of Toronto datasets**, fused on the address.
+> First, the **Safety lens**. This is downtown Toronto, offline. Every pin is
+> risk-scored on **two independent indices — Safety and Activity** — so a busy
+> construction zone isn't confused with an unsafe one. I click **500 Bloor St
+> West**: **medium Activity** (8 open permits — active construction to verify) and
+> a flagged food-safety item. And every claim is grounded: it cites the open
+> permits, a DineSafe conditional pass, a licence — across **three real City of
+> Toronto datasets**, fused on the address.
 > I click **✓ verify** — there's the source record. The local Nemotron model only
 > **phrases** the numbers; it can't invent them. It once claimed '9 permits' when
 > the data showed 8 — our verifier caught it. **A hallucinated number physically
