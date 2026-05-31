@@ -24,7 +24,7 @@ from .optimize import objective, optimize
 
 def _lenses(sc, *, business: bool = False, safety: bool = False):
     ls = [
-        EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end),
+        EventSurge(events=sc.events),
         EconomicLens(),
     ]
     if safety:
@@ -100,9 +100,11 @@ def main(argv: list[str] | None = None) -> int:
         }, indent=2))
         return 0
 
-    print("Urban-OS — downtown event-egress scenario")
+    print("Urban-OS — downtown FIFA convergence-crunch scenario")
+    n_events = len(sc.events) or 1
     print(f"  substrate: {sc.substrate.n} nodes, {sc.substrate.n_edges} links; "
-          f"crowd {sc.crowd_size:,.0f}, full-time at t={sc.event_end:.0f} min")
+          f"{n_events} concurrent events, crowd {sc.total_crowd:,.0f} total, "
+          f"first full-time at t={sc.event_end:.0f} min")
     print(f"  bottleneck: {peak['label']} peaks at {peak['congestion']:.2f}x capacity "
           f"@ t={peak['t']:.0f} min")
     print(f"  do-nothing cost J: ${opt.baseline_J:,.0f}")

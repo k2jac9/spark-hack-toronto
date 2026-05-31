@@ -77,10 +77,10 @@ class Bench:
 
 
 def _downtown_bench() -> Bench:
-    """The real 9-node downtown substrate, primed with a crowd at the stadium."""
+    """The real downtown substrate, primed with a crowd at the primary venue."""
     sub = downtown_substrate()
     load = np.zeros(sub.n)
-    load[sub.idx("stadium")] = 45000.0
+    load[sub.idx("bmo_field")] = 45000.0
     return Bench(
         name=f"downtown (N={sub.n}, E={sub.n_edges})",
         load=load,

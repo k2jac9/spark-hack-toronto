@@ -151,14 +151,19 @@ def test_simulate_shelter_changes_the_run():
     assert none["cost_breakdown"]["exposure"] > 0
 
 
-def test_simulate_sink_west_load_stays_near_zero():
+def test_simulate_sinks_carry_no_standing_load():
     """The egress wave is seeded only at non-sink nodes (graph bug fix), so the
-    orphaned sink_west (0 inbound edges on the published graph) never receives a
-    direct injection — map routing == engine routing."""
+    exit lines never receive a direct injection — map routing == engine routing.
+    Every sink carries ~zero standing load every frame (people are absorbed into
+    ``arrived`` as they reach an exit, never parked on the pin)."""
+    scenario = client.get("/scenario").json()
+    sink_ids = {n["id"] for n in scenario["nodes"] if n["is_sink"]}
+    assert sink_ids, "scenario must expose exit sinks"
     body = client.get("/simulate", params={"release_minutes": 0}).json()
     for fr in body["frames"]:
-        sw = next(nd for nd in fr["nodes"] if nd["id"] == "sink_west")
-        assert sw["load"] == pytest.approx(0.0, abs=1e-3)
+        for nd in fr["nodes"]:
+            if nd["id"] in sink_ids:
+                assert nd["load"] == pytest.approx(0.0, abs=1e-3)
 
 
 def test_simulate_trims_dead_timeline_tail_but_keeps_peak_and_metrics():

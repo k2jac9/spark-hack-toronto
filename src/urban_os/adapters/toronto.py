@@ -1,60 +1,143 @@
-"""Toronto adapter.
+"""Toronto adapter — FIFA World Cup 2026 downtown concurrent-event scenario.
 
-`downtown_scenario()` returns a deterministic, fully-offline downtown substrate
-plus the default Event-Surge scenario (a stadium egress wave). Coordinates are
-real downtown locations so the heatmap lands on the offline basemap; capacities
-are plausibility-calibrated (flagged in provenance), not measured.
+``downtown_scenario()`` returns a deterministic, fully-offline downtown substrate
+plus the default Event-Surge scenario — the **Fan-Festival-window "convergence
+crunch"**: on peak FIFA days multiple major downtown venues let out into the same
+transit corridor at once. Coordinates are real downtown locations so the heatmap
+lands on the offline basemap; capacities are plausibility-calibrated (flagged in
+provenance), not measured.
 
-The topology is built so the egress crowd funnels through **Union** — whose
+Why this scenario (researched, real anchors — see ADR-0018):
+- **BMO Field** ("Toronto Stadium") hosts Toronto's FIFA 2026 matches (opener
+  Canada v Bosnia, Jun 12; Germany v Côte d'Ivoire, Jun 20; Round-of-32, Jul 2;
+  FIFA capacity 45,736). Its *only* adjacent rail is **Exhibition GO**, one stop
+  from Union on the Lakeshore West line — so ~46k funnel through a single station.
+- **Rogers Centre** (Blue Jays) is ~500 m away; **Scotiabank Arena** (concerts)
+  is attached to **Union** itself. Both empty straight onto Union.
+- The **FIFA Fan Festival** (Fort York / The Bentway, Jun 12 – Jul 2, ticketed at
+  $10 to offset a $6.2 M city deficit) plus pop-up pitches (Harbourfront futsal,
+  Nathan Phillips Sq) add sustained fan-zone load.
+
+The topology is built so the egress crowds funnel through **Union** — whose
 outbound rail/subway throughput is the binding constraint — making Union the
-station the simulation surfaces as the bottleneck. On the GX10 this graph is
-replaced by a real TTC GTFS + traffic-volume build via the existing CKANClient;
-the lenses and kernel are unchanged (that swap is the whole point of an adapter).
+convergence bottleneck the simulation surfaces, with **Exhibition GO** the
+FIFA-specific secondary crush. The whole point: one coordinated release/shelter
+lever, optimized across every concurrent event, is what saves the city money.
+On the GX10 this graph is replaced by a real TTC GTFS + traffic-volume build via
+the existing CKANClient; the lenses and kernel are unchanged (that swap is the
+whole point of an adapter).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import networkx as nx
 
 from ..kernel.state import Substrate
 
-# (id, label, lat, lng, capacity[persons]) — real downtown coordinates.
+# (id, label, lat, lng, capacity[persons], group) — real downtown coordinates.
 # `capacity` is a reference comfortable occupancy; load can exceed it (ρ > 1 is
 # the crush). Sinks are effectively unbounded outflow lines.
-_NODES: list[tuple[str, str, float, float, float]] = [
-    ("stadium", "Rogers Centre (venue)", 43.6414, -79.3894, 60000.0),
-    ("union", "Union Station", 43.6452, -79.3806, 6000.0),
-    ("st_andrew", "St Andrew", 43.6479, -79.3849, 2000.0),
-    ("king", "King", 43.6489, -79.3777, 2000.0),
-    ("queen", "Queen", 43.6526, -79.3793, 2000.0),
-    ("st_patrick", "St Patrick", 43.6549, -79.3884, 2000.0),
-    ("sink_east", "GO/Lakeshore East", 43.6450, -79.3700, 1.0e9),
-    ("sink_north", "Line 1 North", 43.6600, -79.3850, 1.0e9),
-    ("sink_west", "GO/Lakeshore West", 43.6400, -79.4000, 1.0e9),
+# `group` drives the map: venue (event source) / fanzone (FIFA pop-up, toggleable)
+# / transit (relay station) / exit (drain line).
+_NODES: list[tuple[str, str, float, float, float, str]] = [
+    # --- event sources (the concurrent let-outs) -----------------------------
+    ("bmo_field", "BMO Field — FIFA (Canada v Bosnia)", 43.6332, -79.4185, 46000.0, "venue"),
+    ("stadium", "Rogers Centre — Blue Jays v Yankees", 43.6414, -79.3894, 50000.0, "venue"),
+    ("scotia", "Scotiabank Arena — concert", 43.6435, -79.3791, 19800.0, "venue"),
+    # --- FIFA fan zones (toggleable so they don't over-populate the map) ------
+    ("fort_york", "FIFA Fan Festival — Fort York", 43.6386, -79.4080, 30000.0, "fanzone"),
+    ("harbourfront", "Floating Futsal — Harbourfront", 43.6386, -79.3833, 4000.0, "fanzone"),
+    ("nathan_phillips", "Pop-up Pitch — Nathan Phillips Sq", 43.6525, -79.3839, 6000.0, "fanzone"),
+    # --- transit relays -------------------------------------------------------
+    ("exhibition_go", "Exhibition GO", 43.6346, -79.4163, 3600.0, "transit"),
+    ("union", "Union Station", 43.6452, -79.3806, 6000.0, "transit"),
+    ("bathurst", "Bathurst (504/511)", 43.6447, -79.4023, 2000.0, "transit"),
+    ("st_andrew", "St Andrew", 43.6479, -79.3849, 2000.0, "transit"),
+    ("king", "King", 43.6489, -79.3777, 2000.0, "transit"),
+    ("queen", "Queen", 43.6526, -79.3793, 2000.0, "transit"),
+    ("st_patrick", "St Patrick", 43.6549, -79.3884, 2000.0, "transit"),
+    ("osgoode", "Osgoode", 43.6505, -79.3866, 2000.0, "transit"),
+    # --- real exit lines (replace the old abstract sinks that clustered at Union)
+    ("sink_lakeshore_w", "Lakeshore West → Mimico", 43.6300, -79.4270, 1.0e9, "exit"),
+    ("sink_lakeshore_e", "Lakeshore East → Danforth", 43.6470, -79.3540, 1.0e9, "exit"),
+    ("sink_line1", "Line 1 → Bloor (north)", 43.6600, -79.3870, 1.0e9, "exit"),
 ]
 
+# id -> group, for the map UI (styling + the FIFA fan-zone toggle).
+NODE_GROUPS: dict[str, str] = {nid: group for nid, _, _, _, _, group in _NODES}
+
 # (src, dst, capacity[persons/min], length) — directed toward the exits.
-# Most of the crowd routes to Union (high inbound link), but Union's outbound
-# rail/subway throughput is only ~800/min — the binding constraint — so a queue
-# piles up there. The St Andrew / St Patrick paths are relief valves with ample
+# Union is the convergence bottleneck: Rogers Centre, Scotiabank Arena, the BMO
+# Field overflow off Exhibition GO and the waterfront fan zones all route into it,
+# while its outbound rail/subway throughput is only ~2,450/min — so a queue piles
+# up there. Exhibition GO is the FIFA-specific secondary crush (one station for
+# 46k). The subway relief paths (St Andrew/St Patrick/Osgoode) have ample
 # downstream capacity, so they drain freely and never become the bottleneck.
+#
+# Edge `length` sets the routing gradient (``dist_to_sink`` = shortest length to
+# an exit): load only flows "downhill". Lengths are chosen so the venues drain
+# *through* Union (Union sits closest to the exit lines, dist 1.0), Exhibition GO
+# routes its BMO crowd primarily into Union (one stop on Lakeshore West), and the
+# St Andrew/King + St Patrick/Queen + Osgoode subway paths stay comparable-length
+# so they remain active relief valves rather than dead uphill links.
 _EDGES: list[tuple[str, str, float, float]] = [
-    ("stadium", "union", 1500.0, 1.0),     # dominant route — most of the crowd
-    ("stadium", "st_andrew", 300.0, 1.2),
-    ("stadium", "st_patrick", 250.0, 1.4),
-    ("union", "sink_east", 400.0, 2.0),    # bottleneck (Union outbound ~800/min)
-    ("union", "sink_north", 400.0, 2.0),   # bottleneck (Union outbound ~800/min)
-    ("st_andrew", "king", 800.0, 0.6),
-    ("king", "sink_east", 800.0, 1.2),
+    # BMO Field egress — almost everyone funnels to the single adjacent station.
+    ("bmo_field", "exhibition_go", 1300.0, 0.5),
+    ("bmo_field", "bathurst", 400.0, 1.0),       # 509/511 streetcar relief
+    ("bmo_field", "fort_york", 200.0, 0.6),      # some drift to the fan festival
+    # Rogers Centre egress — Union-dominant (the ballgame crowd).
+    ("stadium", "union", 1400.0, 1.0),
+    ("stadium", "st_andrew", 350.0, 1.0),
+    ("stadium", "st_patrick", 300.0, 1.0),
+    # Scotiabank Arena egress — attached to Union, dumps straight in.
+    ("scotia", "union", 850.0, 0.5),
+    ("scotia", "king", 300.0, 0.6),
+    # Fan zones drain to the nearest transit.
+    ("fort_york", "exhibition_go", 350.0, 0.8),
+    ("fort_york", "bathurst", 400.0, 0.6),
+    ("harbourfront", "union", 450.0, 0.9),       # 509 along the waterfront
+    ("nathan_phillips", "queen", 400.0, 0.5),
+    ("nathan_phillips", "osgoode", 350.0, 0.4),
+    # Exhibition GO — the FIFA secondary crush (one station for 46k); most of its
+    # crowd rides one stop into Union, a slice drains west on Lakeshore West.
+    ("exhibition_go", "union", 1300.0, 0.8),
+    ("exhibition_go", "sink_lakeshore_w", 300.0, 2.0),
+    # Bathurst relief.
+    ("bathurst", "union", 500.0, 0.8),
+    ("bathurst", "sink_lakeshore_w", 600.0, 1.5),
+    # Union — the convergence bottleneck (outbound ~2,450/min vs ≫ inflow).
+    ("union", "sink_lakeshore_e", 850.0, 1.0),
+    ("union", "sink_line1", 850.0, 1.0),
+    ("union", "sink_lakeshore_w", 750.0, 1.2),
+    # Subway relief valves — ample downstream capacity, never the bottleneck.
+    ("st_andrew", "king", 800.0, 0.8),
+    ("king", "sink_lakeshore_e", 900.0, 1.0),
     ("st_patrick", "queen", 800.0, 0.8),
-    ("queen", "sink_north", 800.0, 1.2),
+    ("queen", "sink_line1", 900.0, 1.0),
+    ("osgoode", "sink_line1", 900.0, 1.0),
+]
+
+# The concurrent let-outs that make up the convergence crunch: (venue_id,
+# crowd_size, event_end[min into the window]). Staggered ends (28–42 min) model
+# the realistic overlap — the FIFA match, the ballgame, the concert and the fan
+# festival don't end at the same instant, but their egress tails pile up together.
+_EVENTS: list[tuple[str, float, float]] = [
+    ("bmo_field", 46000.0, 28.0),   # FIFA full-time
+    ("fort_york", 30000.0, 35.0),   # fan festival wind-down
+    ("scotia", 19800.0, 38.0),      # concert ends
+    ("stadium", 45000.0, 42.0),     # ballgame ends
 ]
 
 
 @dataclass
 class Scenario:
-    """A ready-to-run setup: the substrate plus default Event-Surge parameters."""
+    """A ready-to-run setup: the substrate plus default Event-Surge parameters.
+
+    ``events`` is the full set of concurrent let-outs (the convergence crunch).
+    ``venue_id``/``crowd_size``/``event_end`` mirror the *primary* event (BMO
+    Field) so single-venue callers and tests keep working; ``total_crowd`` is the
+    sum across all events (what the full multi-venue sim injects)."""
 
     substrate: Substrate
     venue_id: str
@@ -62,12 +145,20 @@ class Scenario:
     event_end: float       # minutes into the sim window
     horizon: int           # number of minute-steps to simulate
     dt: float = 1.0
+    events: list[tuple[str, float, float]] = field(default_factory=list)
+
+    @property
+    def total_crowd(self) -> float:
+        """People injected across every concurrent event (≥ the primary crowd)."""
+        if not self.events:
+            return self.crowd_size
+        return float(sum(c for _, c, _ in self.events))
 
 
 def _downtown_graph() -> nx.DiGraph:
     g = nx.DiGraph()
-    for nid, label, lat, lng, cap in _NODES:
-        g.add_node(nid, label=label, lat=lat, lng=lng, capacity=cap)
+    for nid, label, lat, lng, cap, group in _NODES:
+        g.add_node(nid, label=label, lat=lat, lng=lng, capacity=cap, group=group)
     for u, v, cap, length in _EDGES:
         g.add_edge(u, v, capacity=cap, length=length)
     return g
@@ -78,15 +169,27 @@ def downtown_substrate() -> Substrate:
     return Substrate.from_graph(_downtown_graph(), sinks=sinks)
 
 
-def downtown_scenario(crowd_size: float = 45000.0) -> Scenario:
-    """Default demo scenario: a ~45k stadium empties ~30 min into a 90-min window."""
+def downtown_scenario(crowd_size: float | None = None) -> Scenario:
+    """Default demo scenario: the FIFA-window convergence crunch — multiple
+    downtown venues empty into the same corridor over a ~90-min window.
+
+    ``crowd_size`` (optional) overrides the **primary** (BMO Field) crowd only,
+    for single-venue callers/tests; the other concurrent events keep their
+    researched sizes. With no override the full quad-crunch runs."""
+    events = list(_EVENTS)
+    if crowd_size is not None:
+        # Override the primary (first) event's crowd; keep the rest.
+        primary = events[0]
+        events[0] = (primary[0], float(crowd_size), primary[2])
+    primary_id, primary_crowd, primary_end = events[0]
     return Scenario(
         substrate=downtown_substrate(),
-        venue_id="stadium",
-        crowd_size=crowd_size,
-        event_end=30.0,
+        venue_id=primary_id,
+        crowd_size=primary_crowd,
+        event_end=primary_end,
         horizon=120,
         dt=1.0,
+        events=events,
     )
 
 

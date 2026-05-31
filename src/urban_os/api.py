@@ -32,6 +32,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from urban_os.adapters import civic_safety_by_node, downtown_scenario
+from urban_os.adapters.toronto import NODE_GROUPS
 from urban_os.kernel import Simulation
 from urban_os.lenses import (
     BusinessFlow,
@@ -73,13 +74,13 @@ def _lenses(sc):
     EventSurge's staggered release automatically.
     """
     return [
-        EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end),
+        EventSurge(events=sc.events),
         EconomicLens(),
         WeatherLens(
             peak_time=sc.event_end,
             intensity=0.7,
             width=20.0,
-            crowd_size=sc.crowd_size,
+            crowd_size=sc.total_crowd,
         ),
     ]
 
@@ -160,6 +161,9 @@ def scenario() -> dict:
             "lng": _r(sub.lng[i], 6),
             "capacity": _r(sub.capacity[i], 1),
             "is_sink": bool(sub.is_sink[i]),
+            # Map grouping: venue / fanzone / transit / exit — drives styling and
+            # the FIFA fan-zone toggle in the UI.
+            "group": NODE_GROUPS.get(sub.ids[i], "transit"),
         }
         for i in range(sub.n)
     ]
@@ -167,11 +171,25 @@ def scenario() -> dict:
         {"src": sub.ids[int(sub.edge_src[e])], "dst": sub.ids[int(sub.edge_dst[e])]}
         for e in range(sub.n_edges)
     ]
+    # The concurrent let-outs (the convergence crunch), each by venue node id so
+    # the UI can label the multi-event scenario. ``crowd_size`` here is the TOTAL
+    # injected across every event (≥ the primary venue's crowd).
+    by_id = {sub.ids[i]: sub.labels[i] for i in range(sub.n)}
+    events = [
+        {
+            "venue_id": vid,
+            "label": by_id.get(vid, vid),
+            "crowd_size": _r(crowd, 1),
+            "event_end": _r(end, 1),
+        }
+        for vid, crowd, end in sc.events
+    ]
     meta = {
         "venue_id": sc.venue_id,
-        "crowd_size": _r(sc.crowd_size, 1),
+        "crowd_size": _r(sc.total_crowd, 1),
         "event_end": _r(sc.event_end, 1),
         "horizon": int(sc.horizon),
+        "events": events,
     }
     return {"nodes": nodes, "edges": edges, "meta": meta}
 
@@ -299,10 +317,10 @@ def _cross_domain(sc, best_params: dict) -> dict:
     re-runs the lever search.
     """
     stack = [
-        EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end),
+        EventSurge(events=sc.events),
         EconomicLens(),
         SafetyLens(civic_safety_by_node(sc.substrate)),  # civic risk → node field
-        BusinessFlow(sc.venue_id),
+        BusinessFlow(sc.venue_id),                       # retail around the primary venue
     ]
     safety = next(ln for ln in stack if ln.name == "safety")
     base = Simulation(sc.substrate, stack, params={"release_minutes": 0.0}, dt=sc.dt).run(sc.horizon)

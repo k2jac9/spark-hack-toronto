@@ -17,7 +17,7 @@ NODE_RISK = {"union": 1.0, "king": 0.4, "queen": 0.4}
 
 
 def _stack(sc, node_risk):
-    ls = [EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end), EconomicLens()]
+    ls = [EventSurge(events=sc.events), EconomicLens()]
     if node_risk is not None:
         ls.append(SafetyLens(node_risk))
     return ls

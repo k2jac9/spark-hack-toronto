@@ -12,7 +12,7 @@ from urban_os.optimize import cost_breakdown, objective, optimize
 
 def _lenses(sc):
     return [
-        EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end),
+        EventSurge(events=sc.events),
         EconomicLens(),
     ]
 
@@ -21,13 +21,13 @@ def _three_lens(sc, *, intensity: float = 0.7):
     """The full demo stack with a tunable rain intensity, so shelter calibration
     can be exercised across mild → heavy rain."""
     return [
-        EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end),
+        EventSurge(events=sc.events),
         EconomicLens(),
         WeatherLens(
             peak_time=sc.event_end,
             intensity=intensity,
             width=20.0,
-            crowd_size=sc.crowd_size,
+            crowd_size=sc.total_crowd,
         ),
     ]
 

@@ -100,7 +100,8 @@ def test_scenario_shape_and_referential_integrity():
     body = _get("/scenario")
     assert set(body.keys()) == {"nodes", "edges", "meta"}
 
-    node_keys = {"id", "label", "lat", "lng", "capacity", "is_sink"}
+    node_keys = {"id", "label", "lat", "lng", "capacity", "is_sink", "group"}
+    valid_groups = {"venue", "fanzone", "transit", "exit"}
     ids = set()
     for n in body["nodes"]:
         assert set(n.keys()) == node_keys
@@ -109,6 +110,7 @@ def test_scenario_shape_and_referential_integrity():
         assert isinstance(n["lat"], float) and isinstance(n["lng"], float)
         assert isinstance(n["capacity"], float)
         assert isinstance(n["is_sink"], bool)
+        assert n["group"] in valid_groups
         ids.add(n["id"])
     assert len(ids) == len(body["nodes"]), "node ids must be unique"
     assert any(n["is_sink"] for n in body["nodes"]), "expected at least one sink"
@@ -118,10 +120,19 @@ def test_scenario_shape_and_referential_integrity():
         assert e["src"] in ids and e["dst"] in ids  # no dangling edge endpoints
 
     meta = body["meta"]
-    assert set(meta.keys()) == {"venue_id", "crowd_size", "event_end", "horizon"}
+    assert set(meta.keys()) == {"venue_id", "crowd_size", "event_end", "horizon", "events"}
     assert meta["venue_id"] in ids                  # venue is a real node
     assert isinstance(meta["horizon"], int) and meta["horizon"] > 0
     assert meta["crowd_size"] > 0
+    # The concurrent let-outs that make up the convergence crunch.
+    assert isinstance(meta["events"], list) and meta["events"]
+    event_keys = {"venue_id", "label", "crowd_size", "event_end"}
+    for ev in meta["events"]:
+        assert set(ev.keys()) == event_keys
+        assert ev["venue_id"] in ids                # each event venue is a real node
+        assert ev["crowd_size"] > 0
+    # The primary venue is one of the concurrent events.
+    assert meta["venue_id"] in {ev["venue_id"] for ev in meta["events"]}
 
 
 # --------------------------------------------------------------------------- #
