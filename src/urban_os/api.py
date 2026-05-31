@@ -35,7 +35,7 @@ from urban_os.adapters import downtown_scenario
 from urban_os.kernel import Simulation
 from urban_os.lenses import EconomicLens, EventSurge, WeatherLens
 from urban_os.narrate import build_insight
-from urban_os.optimize import optimize
+from urban_os.optimize import cost_breakdown, optimize
 
 # Our own page + the proven offline assets (vendored MapLibre/PMTiles + basemap).
 _HERE = Path(__file__).parent
@@ -173,16 +173,20 @@ def scenario() -> dict:
 @app.get("/simulate")
 def simulate(
     release_minutes: float = Query(0.0, ge=0.0, le=20.0),
+    shelter_fraction: float = Query(0.0, ge=0.0, le=1.0),
     frame_every: int = Query(2, ge=1, le=60),
 ) -> dict:
-    """Run the sim at the given staggered-release lever and return per-step frames
-    (subsampled by ``frame_every`` to cap payload size) for the heatmap + slider.
+    """Run the sim at the given staggered-release + shelter-coverage levers and
+    return per-step frames (subsampled by ``frame_every`` to cap payload size) for
+    the heatmap + slider, plus the J cost-breakdown.
 
-    Bounds are enforced declaratively by ``Query`` (out-of-range → 422). We add
-    two boundary guards: ``release_minutes`` is rejected if it is not finite (a
-    client can send ``release_minutes=nan`` — it satisfies neither ``ge`` nor
-    ``le`` in some stacks, so we check explicitly), and ``frame_every`` is capped
-    at the horizon so a large value still yields at least the first frame.
+    Exposing ``shelter_fraction`` here makes any ``(release, shelter)`` the
+    optimizer evaluates reproducible on the map. Bounds are enforced declaratively
+    by ``Query`` (out-of-range → 422). We add boundary guards: ``release_minutes``
+    and ``shelter_fraction`` are rejected if not finite (a client can send
+    ``=nan``, which satisfies neither ``ge`` nor ``le`` in some stacks, so we check
+    explicitly), and ``frame_every`` is capped at the horizon so a large value
+    still yields at least the first frame.
     """
     sc = _scenario()
     sub = sc.substrate
@@ -190,11 +194,19 @@ def simulate(
     release = float(release_minutes)
     if not math.isfinite(release):
         raise HTTPException(status_code=422, detail="release_minutes must be finite")
+    shelter = float(shelter_fraction)
+    if not math.isfinite(shelter):
+        raise HTTPException(status_code=422, detail="shelter_fraction must be finite")
     # Never subsample coarser than the run length (always at least one frame).
     frame_every = min(int(frame_every), max(1, int(sc.horizon)))
 
     lenses = _lenses(sc)
-    sim = Simulation(sub, lenses, params={"release_minutes": release}, dt=sc.dt)
+    sim = Simulation(
+        sub,
+        lenses,
+        params={"release_minutes": release, "shelter_fraction": shelter},
+        dt=sc.dt,
+    )
     try:
         result = sim.run(sc.horizon, frame_every=frame_every)
     except Exception as exc:  # kernel failure — surface a clean 500, no stack leak
@@ -228,12 +240,17 @@ def simulate(
         "congestion": _r(peak["congestion"]),
         "t": _r(peak["t"], 1),
     }
+    # J cost-breakdown for this exact (release, shelter) so the UI can show WHY a
+    # run scores as it does and reconcile the heatmap with the optimizer's pick.
+    breakdown = {k: _r(v, 2) for k, v in cost_breakdown(result, lenses).items()}
     return {
         "times": [_r(t, 1) for t in result.times],
         "frames": frames,
         "metrics": metrics,
         "peak": peak,
         "release_minutes": _r(release_minutes, 1),
+        "shelter_fraction": _r(shelter, 2),
+        "cost_breakdown": breakdown,
     }
 
 
@@ -258,6 +275,8 @@ def optimize_endpoint() -> dict:
         insight = build_insight(opt, event_end=sc.event_end)
     except Exception as exc:  # optimizer/narrator failure — clean 500, no stack leak
         raise HTTPException(status_code=500, detail="optimization failed") from exc
+    best_breakdown = {k: _r(v, 2) for k, v in (opt.best_breakdown or {}).items()}
+    baseline_breakdown = {k: _r(v, 2) for k, v in (opt.baseline_breakdown or {}).items()}
     return {
         "insight": insight.text,
         "grounded": bool(insight.grounded),
@@ -267,4 +286,9 @@ def optimize_endpoint() -> dict:
         "best_peak": _peak_dict(opt.best_result),
         "best_params": {k: _r(v, 3) for k, v in opt.best_params.items()},
         "savings": _r(opt.savings, 2),
+        # Surface the J decomposition so the chosen (release, shelter) is
+        # reproducible from on-screen dollar terms (delay/hold/exposure/staffing/
+        # safety/total), not just the headline saving.
+        "cost_breakdown": best_breakdown,
+        "baseline_cost_breakdown": baseline_breakdown,
     }

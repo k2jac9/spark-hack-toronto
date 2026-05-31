@@ -59,6 +59,14 @@ class EventSurge(Lens):
     def configure(self, substrate: Substrate) -> None:
         self._venue_idx = substrate.idx(self.venue_id)
         w = Operators.spatial_decay(substrate, self._venue_idx, self.decay)
+        # Never seed the egress wave directly into a sink. Spatial decay weights
+        # by raw lat/lng proximity across ALL nodes, so a nearby exit (or an
+        # orphaned sink with no inbound edges, e.g. ``sink_west``) would get a
+        # slug of people injected on the spot and never routed through the real
+        # graph — the drawn graph would not equal the simulated routing (audit
+        # finding). Zeroing the sink entries before normalizing seeds the crowd
+        # only at non-sink nodes; people reach sinks solely via real edges.
+        w = np.where(substrate.is_sink, 0.0, w)
         s = w.sum()
         self._spatial = w / s if s > 0 else w
 

@@ -49,11 +49,16 @@ _MAX_CAP_PENALTY = 0.25
 _MAX_RISK_BONUS = 0.6
 # Per-(person·minute of exposure) dollar cost of standing in the rain queue when
 # unsheltered — a small comfort/health penalty layered on the economic delay
-# cost. Synthetic.
-_EXPOSURE_COST = 0.10
-# Cost of running full shelter for the whole crowd for one minute ($/person·min).
-# Sets the price the optimizer pays for the shelter lever.
-_SHELTER_COST = 0.04
+# cost. Synthetic; calibrated with _SHELTER_COST / VALUE_OF_SAFETY in ADR-0015.
+_EXPOSURE_COST = 0.05
+# Per-(person·minute) cost of sheltering someone who is actually in the system
+# while it is raining ($/person·min of covered, rained-on load). Staffing is now
+# integrated against the **in-system load present during rain** (not a static
+# crowd_size), so holding the crowd longer — which empties the platforms before
+# the rain peak — makes shelter *cheaper*, not more expensive (audit finding:
+# the old static-crowd staffing was non-monotonic in release). Calibrated in
+# ADR-0015 so shelter is a genuine interior optimum.
+_SHELTER_COST = 0.14
 
 
 class WeatherLens(Lens):
@@ -153,17 +158,23 @@ class WeatherLens(Lens):
         in_system = float(state.fields["load"].sum())
         exposure_person_min = in_system * wet * dt
         state.params["_weather_exposure_step"] = exposure_person_min
-        # Track the realised wetness for the observer.
+        # Track the realised wetness and in-system load for the observer/cost.
         state.params["_weather_wetness_step"] = wet
+        state.params["_weather_in_system_step"] = in_system
 
     # ----------------------------------------------------------------- observe
     def observe(self, state: State, t: float) -> dict[str, float]:
         wet = float(state.params.get("_weather_wetness_step", 0.0))
         exposure = float(state.params.get("_weather_exposure_step", 0.0))
+        in_system = float(state.params.get("_weather_in_system_step", 0.0))
         return {
             "rain_intensity": float(self._rain_at(t)),
             "wetness": wet,
             "exposure_cost": exposure * _EXPOSURE_COST,
+            # Person·minutes of in-system load standing in the rain this step,
+            # at the unsheltered-equivalent rain level (the staffing base before
+            # the shelter fraction is applied). Integrated in cost().
+            "shelter_load_min": in_system * self._rain_at(t),
         }
 
     # ------------------------------------------------------------------ levers
@@ -180,19 +191,31 @@ class WeatherLens(Lens):
         """This lens's J term: exposure discomfort + shelter staffing dollars.
 
         Exposure is summed from the per-step series (the part the optimizer can
-        shrink by deploying shelter). Shelter itself costs ``_SHELTER_COST`` per
-        person·minute of the crowd it covers, integrated over the rainy window —
-        non-zero only when the lever is engaged, so doing nothing is free of
-        staffing cost but pays full exposure. That tension is the interior
+        shrink by deploying shelter). Shelter staffing is ``_SHELTER_COST`` per
+        person·minute of **in-system load that is actually standing in the rain**,
+        integrated over the run (``Σ in_system·rain·dt``) and scaled by the
+        shelter fraction covering them. Re-basing on the live in-system load — not
+        a static ``crowd_size`` — is the audit fix: holding the crowd longer
+        drains the platforms before the rain peak, so fewer people are sheltered
+        and the staffing bill *falls* with release (it is monotone, not the old
+        3×-with-release blow-up). Non-zero only when shelter is engaged, so doing
+        nothing pays full exposure but no staffing — that tension is the interior
         optimum, mirroring EventSurge's hold-discount.
         """
         exposure_dollars = float(sum(result.series("exposure_cost")))
         shelter = float(np.clip(result.params.get("shelter_fraction", 0.0), 0.0, 1.0))
         staffing = 0.0
-        if shelter > 0.0 and self.crowd_size > 0.0:
-            # Pay for shelter only while it is actually raining (wetness basis),
-            # integrated over the run using the recorded rain intensity per step.
+        if shelter > 0.0:
             dt = float(result.dt)
-            rain_minutes = sum(self._rain_at(t) for t in result.times) * dt
-            staffing = self.crowd_size * shelter * rain_minutes * _SHELTER_COST
+            # Person·minutes of in-system load sheltered from the rain, integrated
+            # over the run (recorded per step by observe()). Falls back to the
+            # static crowd_size basis only if the metric is absent (e.g. a bare
+            # WeatherLens with no observe series recorded).
+            load_min = result.series("shelter_load_min")
+            if load_min:
+                staffing_basis = float(sum(load_min)) * dt
+            else:  # pragma: no cover - defensive: no recorded series
+                rain_minutes = sum(self._rain_at(t) for t in result.times) * dt
+                staffing_basis = self.crowd_size * rain_minutes
+            staffing = shelter * _SHELTER_COST * staffing_basis
         return exposure_dollars + staffing

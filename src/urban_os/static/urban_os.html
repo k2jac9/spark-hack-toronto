@@ -14,7 +14,21 @@
     h1 { font-size: 18px; margin: 0 0 2px; }
     h2 { font-size: 12px; margin: 16px 0 6px; color: #94a3b8; font-weight: 600;
          text-transform: uppercase; letter-spacing: .05em; }
+    /* Control-group label — looks like the old <h2> but is NOT a heading, so the
+       document outline stays clean (only real sections are headings). */
+    .lbl { font-size: 12px; margin: 14px 0 4px; color: #94a3b8; font-weight: 600;
+           text-transform: uppercase; letter-spacing: .05em; }
     .hint { color: #94a3b8; font-size: 13px; }
+    #readout { width: 100%; border-collapse: collapse; font-size: 12px; margin: 4px 0 0; }
+    #readout th, #readout td { text-align: right; padding: 3px 6px; border-bottom: 1px solid #1e293b; }
+    #readout th:first-child, #readout td:first-child { text-align: left; }
+    #readout thead th { color: #64748b; font-weight: 600; }
+    #readout td.over { color: #f87171; font-weight: 700; }
+    #readout tr.peak td { background: #14233f; }
+    .breakdown { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0 0; }
+    .breakdown td { padding: 2px 6px; border-bottom: 1px solid #1e293b; }
+    .breakdown td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+    .breakdown tr.total td { font-weight: 700; border-top: 1px solid #334155; border-bottom: none; }
     .clock { font-size: 40px; font-weight: 700; line-height: 1; }
     .clock .u { font-size: 15px; color: #64748b; font-weight: 600; }
     .controls { margin-top: 10px; }
@@ -50,38 +64,46 @@
   </style>
 </head>
 <body>
-  <div id="map"></div>
+  <main id="map" aria-label="Downtown egress map"></main>
   <div id="panel" role="complementary" aria-label="Simulation controls">
     <h1>Urban-OS · Downtown Egress</h1>
-    <p class="hint">100% on-device · offline vector map · post-event crowd simulation</p>
+    <p class="hint">Offline vector map · runs on the local box · post-event crowd simulation</p>
 
     <h2>Clock</h2>
     <div class="clock"><span id="clock">0</span><span class="u"> min</span> ·
       <span class="hint" id="phase">pre-event</span></div>
 
     <div class="controls">
-      <h2>Time</h2>
-      <div class="row">
+      <div class="lbl" id="time-lbl">Time</div>
+      <div class="row" role="group" aria-labelledby="time-lbl">
         <button class="gh" id="play" type="button">▶ Play</button>
         <input id="time" type="range" min="0" max="0" step="1" value="0"
                aria-label="Simulation time frame" />
       </div>
 
-      <h2>Layer</h2>
-      <div class="row">
+      <div class="lbl" id="layer-lbl">Layer</div>
+      <div class="row" role="group" aria-labelledby="layer-lbl">
         <button class="gh" id="heatmap-toggle" type="button" aria-pressed="true"
                 aria-label="Toggle congestion heatmap">🔥 Heatmap</button>
         <button class="gh" id="metric-toggle" type="button" aria-pressed="false"
                 aria-label="Toggle congestion vs risk weighting">Weight: congestion</button>
       </div>
 
-      <h2>Staggered release lever (minutes)</h2>
-      <div class="row">
+      <div class="lbl" id="release-lbl">Staggered release lever (minutes)</div>
+      <div class="row" role="group" aria-labelledby="release-lbl">
         <input id="release" type="range" min="0" max="20" step="2" value="0"
                aria-label="Staggered release minutes" />
         <span id="release-val" style="min-width:42px;text-align:right;font-weight:700">0m</span>
       </div>
       <p class="hint">Holding the crowd and releasing it in waves flattens the peak crush.</p>
+
+      <div class="lbl" id="shelter-lbl">Shelter coverage lever</div>
+      <div class="row" role="group" aria-labelledby="shelter-lbl">
+        <input id="shelter" type="range" min="0" max="1" step="0.25" value="0"
+               aria-label="Shelter coverage fraction" />
+        <span id="shelter-val" style="min-width:42px;text-align:right;font-weight:700">0%</span>
+      </div>
+      <p class="hint">Covered queueing + marshals divide the rain crush-risk field — a cost the optimizer weighs against staffing.</p>
 
       <ul id="legend" aria-label="Congestion legend">
         <li><span class="sw" style="background:#22c55e"></span>≤0.5</li>
@@ -91,6 +113,13 @@
         <li><span class="sw" style="background:#1e293b;border:1px solid #475569"></span>exit (sink)</li>
       </ul>
     </div>
+
+    <h2>Per-node readout</h2>
+    <p class="hint">Non-colour congestion encoding for the current frame (peak first).</p>
+    <table id="readout" aria-label="Per-node congestion and load for the current frame">
+      <thead><tr><th scope="col">Node</th><th scope="col">Cong.×</th><th scope="col">Risk</th><th scope="col">Load</th></tr></thead>
+      <tbody id="readout-body"></tbody>
+    </table>
 
     <h2>Optimize</h2>
     <div class="row">
@@ -117,6 +146,14 @@
     let EVENT_END = 30;
     let HEATMAP_ON = true; // congestion/risk heatmap over the substrate nodes
     let WEIGHT = 'congestion'; // 'congestion' | 'risk' — what the heatmap weighs
+    let RELEASE = 0;      // staggered-release lever (minutes)
+    let SHELTER = 0;      // shelter-coverage lever (fraction 0..1)
+
+    // ONE rounding convention per quantity so the same number reads identically
+    // everywhere (insight prose, cards, readout): congestion/risk to 2 dp, money
+    // to whole $k matching the narrator's figures.
+    const mult2 = (x) => Number(x || 0).toFixed(2);          // 0.94×
+    const dollarsK = (x) => '~$' + Math.round(Number(x || 0) / 1000) + 'k';
 
     // Green -> amber -> red by congestion; >1 (over capacity) is full red.
     function colorFor(c) {
@@ -195,6 +232,30 @@
       document.getElementById('clock').textContent = t;
       document.getElementById('phase').textContent =
         t < EVENT_END ? 'pre-event' : (t < EVENT_END + 25 ? 'crush building' : 'draining');
+      refreshReadout(fr);
+    }
+
+    // Non-colour congestion encoding: a sortable text table of every non-sink
+    // node for the current frame, peak first. Congestion isn't conveyed by colour
+    // alone (accessibility) — the numbers are always on screen.
+    function refreshReadout(fr) {
+      const body = document.getElementById('readout-body');
+      if (!body || !SCEN) return;
+      const byId = {};
+      if (fr) fr.nodes.forEach((n) => byId[n.id] = n);
+      const rows = SCEN.nodes
+        .filter((nd) => !nd.is_sink)
+        .map((nd) => {
+          const s = byId[nd.id] || { congestion: 0, risk: 0, load: 0 };
+          return { label: nd.label, c: s.congestion || 0, r: s.risk || 0, load: s.load || 0 };
+        })
+        .sort((a, b) => b.c - a.c);
+      body.innerHTML = rows.map((row, i) =>
+        '<tr' + (i === 0 ? ' class="peak"' : '') + '><td>' + esc(row.label) + '</td>' +
+        '<td class="' + (row.c > 1 ? 'over' : '') + '">' + mult2(row.c) + '×</td>' +
+        '<td>' + mult2(row.r) + '</td>' +
+        '<td>' + Math.round(row.load).toLocaleString() + '</td></tr>'
+      ).join('');
     }
 
     function drawStatic() {
@@ -231,16 +292,19 @@
         const p = e.features[0].properties;
         const c = Number(p.congestion);
         hover.setLngLat(e.lngLat).setHTML(
-          '<b>' + esc(p.label) + '</b><br>congestion ' + c.toFixed(2) + '×' +
+          '<b>' + esc(p.label) + '</b><br>congestion ' + mult2(c) + '×' +
           (c > 1 ? ' <span style="color:#f87171">over capacity</span>' : '') +
           '<br>load ' + Number(p.load).toLocaleString()).addTo(map);
       });
       map.on('mouseleave', 'nodes', () => { map.getCanvas().style.cursor = ''; hover.remove(); });
     }
 
-    async function loadSim(release) {
-      document.getElementById('status').textContent = 'Simulating (release ' + release + 'm)…';
-      const res = await fetch('/simulate?release_minutes=' + release);
+    async function loadSim(release, shelter) {
+      RELEASE = Number(release);
+      SHELTER = shelter == null ? SHELTER : Number(shelter);
+      document.getElementById('status').textContent =
+        'Simulating (release ' + RELEASE + 'm · shelter ' + Math.round(SHELTER * 100) + '%)…';
+      const res = await fetch('/simulate?release_minutes=' + RELEASE + '&shelter_fraction=' + SHELTER);
       SIM = await res.json();
       const slider = document.getElementById('time');
       slider.max = String(SIM.frames.length - 1);
@@ -249,7 +313,7 @@
       refreshNodes();
       const pk = SIM.peak;
       document.getElementById('status').innerHTML =
-        'Peak congestion <b>' + pk.congestion.toFixed(2) + '×</b> at <b>' + esc(pk.label) +
+        'Peak congestion <b>' + mult2(pk.congestion) + '×</b> at <b>' + esc(pk.label) +
         '</b> (t=' + pk.t + 'm).';
     }
 
@@ -292,7 +356,14 @@
     // Release lever
     const rel = document.getElementById('release');
     rel.addEventListener('input', (e) => { document.getElementById('release-val').textContent = e.target.value + 'm'; });
-    rel.addEventListener('change', (e) => { stop(); loadSim(Number(e.target.value)); });
+    rel.addEventListener('change', (e) => { stop(); loadSim(Number(e.target.value), SHELTER); });
+
+    // Shelter lever (0..1 in 0.25 steps, displayed as a percentage).
+    const shel = document.getElementById('shelter');
+    shel.addEventListener('input', (e) => {
+      document.getElementById('shelter-val').textContent = Math.round(Number(e.target.value) * 100) + '%';
+    });
+    shel.addEventListener('change', (e) => { stop(); loadSim(RELEASE, Number(e.target.value)); });
 
     // Optimize
     const optBtn = document.getElementById('opt-btn');
@@ -304,19 +375,38 @@
         const d = await (await fetch('/optimize')).json();
         const bp = d.baseline_peak, sp = d.best_peak;
         const relMin = d.best_params.release_minutes != null ? d.best_params.release_minutes : 0;
+        const shelFrac = d.best_params.shelter_fraction != null ? d.best_params.shelter_fraction : 0;
+        const shelPct = Math.round(shelFrac * 100);
+        const cb = d.cost_breakdown || {};
+        // Money is shown to whole $k everywhere to match the narrator's figures
+        // (one rounding convention per quantity).
+        const breakdownRows = [
+          ['Commuter delay', cb.delay], ['Hold (release)', cb.hold],
+          ['Rain exposure', cb.exposure], ['Shelter staffing', cb.staffing],
+          ['Crowd safety', cb.safety],
+        ].map(([k, v]) =>
+          '<tr><td>' + k + '</td><td>' + dollarsK(v) + '</td></tr>').join('') +
+          '<tr class="total"><td>Total J</td><td>' + dollarsK(cb.total) + '</td></tr>';
         optOut.innerHTML =
           '<div class="insight"><span class="tag ' + (d.grounded ? 'grounded">✓ grounded' : 'fallback">⚠ template') +
-          '</span><br>' + esc(d.insight) + '</div>' +
+          '</span> <span class="hint" title="Every figure is checked against the simulation run — not a claim that the optimizer itself is sound end-to-end.">ⓘ</span>' +
+          '<br>' + esc(d.insight) + '</div>' +
           '<div class="ba">' +
-          '<div class="card"><div class="k">Do nothing</div><div class="v bad">' + bp.congestion.toFixed(2) + '×</div>' +
+          '<div class="card"><div class="k">Do nothing</div><div class="v bad">' + mult2(bp.congestion) + '×</div>' +
           '<div class="hint">' + esc(bp.label) + '</div></div>' +
-          '<div class="card"><div class="k">Best (' + relMin + 'm release)</div><div class="v good">' + sp.congestion.toFixed(2) + '×</div>' +
+          '<div class="card"><div class="k">Best (' + relMin + 'm release · ' + shelPct + '% shelter)</div>' +
+          '<div class="v good">' + mult2(sp.congestion) + '×</div>' +
           '<div class="hint">' + esc(sp.label) + '</div></div></div>' +
-          '<div class="save">Saves ~$' + Math.round(d.savings).toLocaleString() + '</div>';
-        // Reflect the recommended lever on the map.
+          '<div class="save">Net benefit ' + dollarsK(d.savings) + '</div>' +
+          '<div class="lbl">Why — objective J breakdown (best run)</div>' +
+          '<table class="breakdown" aria-label="Objective J cost breakdown for the recommended run"><tbody>' +
+          breakdownRows + '</tbody></table>';
+        // Reflect BOTH recommended levers on the map + sliders.
         rel.value = String(relMin);
         document.getElementById('release-val').textContent = relMin + 'm';
-        stop(); loadSim(Number(relMin));
+        shel.value = String(shelFrac);
+        document.getElementById('shelter-val').textContent = shelPct + '%';
+        stop(); loadSim(Number(relMin), Number(shelFrac));
       } catch (err) {
         optOut.innerHTML = '<div class="err" role="alert">Optimize failed (' + esc(err.message) + '). The map + slider still work.</div>';
       } finally {
@@ -329,7 +419,7 @@
         SCEN = await (await fetch('/scenario')).json();
         EVENT_END = SCEN.meta.event_end;
         drawStatic();
-        await loadSim(0);
+        await loadSim(0, 0);
       } catch (err) {
         document.getElementById('status').innerHTML =
           '<div class="err">Failed to load scenario: ' + esc(err.message) + '</div>';

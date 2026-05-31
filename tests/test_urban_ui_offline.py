@@ -182,3 +182,45 @@ def test_before_after_panel_uses_optimize_fields(page: str) -> None:
     assert "best_peak" in page
     assert "savings" in page
     assert "insight" in page
+
+
+# ---- 4. Audit-remediation UI surface (GOAL 4) -----------------------------
+
+
+def test_shelter_lever_is_present_and_wired(page: str) -> None:
+    """A shelter-coverage slider exists and is sent to /simulate alongside release."""
+    assert 'id="shelter"' in page
+    assert "shelter_fraction=" in page          # passed to /simulate
+    assert "best_params.shelter_fraction" in page  # echoed in the optimize panel
+
+
+def test_cost_breakdown_is_surfaced(page: str) -> None:
+    """The objective J decomposition is shown so the pick is reproducible."""
+    assert "cost_breakdown" in page
+    for term in ("delay", "hold", "exposure", "staffing", "safety"):
+        assert term in page.lower()
+
+
+def test_banner_is_truthful_about_compute(page: str) -> None:
+    """Compute is server-side; only the map is offline — the banner must say so
+    and must NOT claim the whole thing is on-device."""
+    assert "100% on-device" not in page
+    assert "runs on the local box" in page
+
+
+def test_map_is_a_labelled_main_landmark(page: str) -> None:
+    """The map is wrapped in <main aria-label> for screen-reader navigation."""
+    assert 'aria-label="Downtown egress map"' in page
+    assert "<main" in page
+
+
+def test_non_colour_congestion_readout_present(page: str) -> None:
+    """Congestion must not be colour-only: a per-node text readout is on screen."""
+    assert 'id="readout"' in page
+    assert "refreshReadout" in page
+
+
+def test_grounded_tooltip_clarifies_scope(page: str) -> None:
+    """The ✓ grounded tag carries a tooltip narrowing it to 'verified against the
+    simulation run', not end-to-end optimizer soundness."""
+    assert "checked against the simulation run" in page

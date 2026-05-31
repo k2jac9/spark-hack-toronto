@@ -52,3 +52,21 @@ def test_crowd_conserved_regardless_of_lever() -> None:
     for res in (base, staggered):
         arrived = res.frames[-1]["arrived"].sum()
         assert arrived > 0.9 * sc.crowd_size
+
+
+def test_event_surge_never_seeds_people_into_sinks() -> None:
+    """The egress wave is seeded by spatial proximity, which used to inject people
+    DIRECTLY into nearby sinks — including the orphaned ``sink_west`` (0 inbound
+    edges on the published graph), which then never drained: the drawn graph did
+    not equal the simulated routing. With the fix, sink nodes carry zero standing
+    LOAD every step (the crowd only ever reaches them via real edges, where it is
+    absorbed into ``arrived``)."""
+    sc, res = _run(0.0)
+    sub = sc.substrate
+    sink_idx = [i for i in range(sub.n) if sub.is_sink[i]]
+    for fr in res.frames:
+        for i in sink_idx:
+            assert fr["load"][i] == 0.0  # no standing load ever sits on a sink
+    # In particular, the orphaned sink_west is empty for the whole run.
+    sw = sub.idx("sink_west")
+    assert all(fr["load"][sw] == 0.0 for fr in res.frames)

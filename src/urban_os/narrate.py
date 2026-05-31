@@ -32,11 +32,13 @@ _SYSTEM = (
     "You are an urban-operations analyst briefing a city transit operations chief "
     "after a major event. You are given a set of FIGURES computed by a simulation. "
     "Write exactly ONE sentence that states the insight: which station is the "
-    "bottleneck, how overloaded it gets and when, and what the recommended "
-    "staggered-release intervention saves. Hard rules: use ONLY numbers that appear "
-    "in the FIGURES — never invent, round differently, total, or estimate any "
-    "number; name the station exactly as given. Output the single sentence and "
-    "nothing else."
+    "bottleneck, how overloaded it gets and when, the recommended intervention "
+    "(staggered release AND shelter coverage), and the NET benefit it delivers. "
+    "Hard rules: use ONLY numbers that appear in the FIGURES — never invent, round "
+    "differently, total, or estimate any number; name the station exactly as given. "
+    "The saving is the NET intervention benefit (the drop in total objective J, "
+    "which already nets out the hold penalty and the weather/safety terms) — do NOT "
+    "call it a commuter-delay saving. Output the single sentence and nothing else."
 )
 
 # A "number" the guard reasons about: an integer or a decimal, optionally signed.
@@ -102,8 +104,15 @@ def _figures(opt: OptResult, event_end: float) -> dict:
         "minutes_after": max(0, round(float(base_peak["t"]) - float(event_end))),
         "reduction_pct": reduction,
         "release_min": round(float(opt.best_params.get("release_minutes", 0))),
+        # Shelter coverage the optimizer chose, as a whole-number percentage. The
+        # narrator reflects BOTH levers; 0 ⇒ no shelter in the recommendation.
+        "shelter_pct": max(
+            0, min(100, round(float(opt.best_params.get("shelter_fraction", 0)) * 100))
+        ),
         "baseline_cost_k": round(float(opt.baseline_J) / 1000),  # $k
-        "savings_k": max(0, round(float(opt.savings) / 1000)),   # $k (never negative)
+        # NET intervention benefit (drop in total J) in $k — already nets the hold
+        # penalty + weather/safety terms; never negative (baseline is in the search).
+        "savings_k": max(0, round(float(opt.savings) / 1000)),
     }
 
 
@@ -115,13 +124,21 @@ def _station_phrase(station: object) -> str:
     return str(station)
 
 
+def _intervention_phrase(f: dict) -> str:
+    """Name both levers the optimizer chose: staggered release always, plus
+    shelter coverage when it is part of the recommendation."""
+    release = f"a {f['release_min']}-minute staggered release"
+    if f["shelter_pct"] > 0:
+        return f"{release} with {f['shelter_pct']}% shelter coverage"
+    return release
+
+
 def _deterministic(f: dict) -> str:
     return (
         f"Doing nothing, {_station_phrase(f['station'])} peaks at {f['base_mult']}x "
-        f"its safe capacity about {f['minutes_after']} minutes after full-time; a "
-        f"{f['release_min']}-minute staggered release cuts that peak by "
-        f"{f['reduction_pct']}% and saves about ${f['savings_k']}k in "
-        f"commuter-delay cost."
+        f"its safe capacity about {f['minutes_after']} minutes after full-time; "
+        f"{_intervention_phrase(f)} cuts that peak by {f['reduction_pct']}% for a net "
+        f"intervention benefit of about ${f['savings_k']}k."
     )
 
 
@@ -181,8 +198,8 @@ def build_insight(
     # still grounded) sentence than emit an ungrounded headline.
     if _unverified(deterministic, allowed):  # pragma: no cover - construction-guarded
         deterministic = (
-            f"{station} is the projected bottleneck; a staggered release reduces "
-            f"the peak and commuter-delay cost (see figures)."
+            f"{station} is the projected bottleneck; the recommended intervention "
+            f"reduces the peak for a net benefit (see figures)."
         )
 
     user = (
@@ -191,8 +208,9 @@ def build_insight(
         f"- peak load without action: {f['base_mult']}x safe capacity\n"
         f"- timing of peak: {f['minutes_after']} minutes after full-time\n"
         f"- recommended staggered release: {f['release_min']} minutes\n"
+        f"- recommended shelter coverage: {f['shelter_pct']}%\n"
         f"- peak reduced by: {f['reduction_pct']}%\n"
-        f"- commuter-delay saving: ${f['savings_k']}k"
+        f"- net intervention benefit: ${f['savings_k']}k"
     )
 
     try:

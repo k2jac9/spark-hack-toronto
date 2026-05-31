@@ -3,7 +3,7 @@ LLM sentence that invents a number (the hallucination guard)."""
 from __future__ import annotations
 
 from urban_os.adapters import downtown_scenario
-from urban_os.lenses import EconomicLens, EventSurge
+from urban_os.lenses import EconomicLens, EventSurge, WeatherLens
 from urban_os.narrate import build_insight
 from urban_os.optimize import optimize
 
@@ -11,6 +11,20 @@ from urban_os.optimize import optimize
 def _opt():
     sc = downtown_scenario()
     lenses = [EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end), EconomicLens()]
+    return optimize(sc.substrate, lenses, sc.horizon, dt=sc.dt), sc
+
+
+def _opt_three_lens():
+    """The full demo stack: the optimizer picks shelter>0, so the narrator must
+    reflect BOTH levers."""
+    sc = downtown_scenario()
+    lenses = [
+        EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end),
+        EconomicLens(),
+        WeatherLens(
+            peak_time=sc.event_end, intensity=0.7, width=20.0, crowd_size=sc.crowd_size
+        ),
+    ]
     return optimize(sc.substrate, lenses, sc.horizon, dt=sc.dt), sc
 
 
@@ -36,6 +50,22 @@ def test_deterministic_fallback_is_grounded_and_specific() -> None:
     assert "Union Station" in ins.text
     assert f"{ins.figures['release_min']}-minute" in ins.text
     assert str(ins.figures["savings_k"]) in ins.text
+    # The saving is the NET intervention benefit, not "commuter-delay cost"
+    # (J nets the hold penalty + weather/safety terms — audit finding).
+    assert "net intervention benefit" in ins.text
+    assert "commuter-delay" not in ins.text
+
+
+def test_narrator_reflects_both_levers_when_shelter_chosen() -> None:
+    """On the full stack the optimizer picks shelter>0; the sentence must name
+    BOTH the staggered release and the shelter coverage."""
+    opt, sc = _opt_three_lens()
+    ins = build_insight(opt, event_end=sc.event_end, llm=_Boom())
+    assert opt.best_params.get("shelter_fraction", 0.0) > 0.0  # calibration sanity
+    assert ins.figures["shelter_pct"] > 0
+    assert f"{ins.figures['shelter_pct']}% shelter coverage" in ins.text
+    assert f"{ins.figures['release_min']}-minute staggered release" in ins.text
+    assert "net intervention benefit" in ins.text
 
 
 def test_insight_is_specific_with_a_live_model_or_fallback() -> None:

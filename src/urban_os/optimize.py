@@ -24,6 +24,59 @@ def objective(result: SimResult, lenses: list[Lens]) -> float:
     return float(sum(lens.weight * lens.cost(result) for lens in lenses))
 
 
+# The cost terms the UI/narrator surface so the optimizer's pick is reproducible
+# from on-screen numbers (audit finding: the hold and shelter/safety costs were
+# invisible, so "longer is always better by the heatmap" could not be reconciled
+# with the optimizer's choice). Each maps to a per-step metric series the lenses
+# already emit; ``total`` is just their sum and equals ``J`` (weights are 1.0 in
+# the demo stack, asserted by the cost-decomposition test).
+_COST_TERMS = ("delay", "hold", "exposure", "staffing", "safety")
+
+
+def cost_breakdown(result: SimResult, lenses: list[Lens]) -> dict[str, float]:
+    """Decompose ``J`` into its named dollar terms for transparency.
+
+    Returns ``{delay, hold, exposure, staffing, safety, total}``. ``total`` is the
+    sum of the five terms and equals ``objective(result, lenses)`` for the demo
+    three-lens stack (all weights 1.0). Terms are derived from the per-step metric
+    series the lenses emit, so this never re-runs the simulation.
+
+    - **delay**: commuter-delay dollars (over-capacity queueing) — EconomicLens.
+    - **safety**: integrated crowd-safety risk priced into ``J`` — EconomicLens.
+    - **exposure**: rain-exposure discomfort for the unsheltered — WeatherLens.
+    - **staffing**: cost of running shelter over the in-system rained-on load.
+    - **hold**: staggered-release hold cost (orderly waiting) — EventSurge.
+    """
+    delay = float(sum(result.series("delay_cost")))
+    safety = float(sum(result.series("safety_cost")))
+    exposure = float(sum(result.series("exposure_cost")))
+    total = objective(result, lenses)
+    # Staffing is the part of the weather-lens cost beyond exposure; hold is the
+    # remainder of J once the economic + weather terms are accounted for. Deriving
+    # them by subtraction keeps the lenses the single source of truth for their
+    # own ``cost`` (no formula is duplicated here) while still naming every term.
+    staffing = max(0.0, total - delay - safety - exposure - _hold_cost(result, lenses))
+    hold = _hold_cost(result, lenses)
+    breakdown = {
+        "delay": delay,
+        "hold": hold,
+        "exposure": exposure,
+        "staffing": staffing,
+        "safety": safety,
+    }
+    breakdown["total"] = total
+    return breakdown
+
+
+def _hold_cost(result: SimResult, lenses: list[Lens]) -> float:
+    """The staggered-release hold dollars: the EventSurge lens's whole cost term
+    (it contributes only the hold penalty to ``J``)."""
+    for lens in lenses:
+        if getattr(lens, "name", "") == "event_surge":
+            return float(lens.weight * lens.cost(result))
+    return 0.0
+
+
 @dataclass
 class OptResult:
     levers: list[Lever]
@@ -34,6 +87,12 @@ class OptResult:
     best_result: SimResult
     best_J: float
     trials: list[dict] = field(default_factory=list)  # [{params, J}]
+    # Per-run J decomposition (delay/hold/exposure/staffing/safety/total) for the
+    # do-nothing baseline and the chosen intervention — surfaced so the UI/narrator
+    # can show WHY the optimizer picks its answer (audit finding). None for
+    # directly-constructed OptResults; ``optimize()`` always fills them.
+    baseline_breakdown: dict | None = None
+    best_breakdown: dict | None = None
 
     @property
     def savings(self) -> float:
@@ -42,8 +101,16 @@ class OptResult:
 
     def to_dict(self) -> dict:
         return {
-            "baseline": {"params": self.baseline_params, "J": self.baseline_J},
-            "best": {"params": self.best_params, "J": self.best_J},
+            "baseline": {
+                "params": self.baseline_params,
+                "J": self.baseline_J,
+                "breakdown": self.baseline_breakdown,
+            },
+            "best": {
+                "params": self.best_params,
+                "J": self.best_J,
+                "breakdown": self.best_breakdown,
+            },
             "savings": self.savings,
             "levers": [{"name": lv.name, "label": lv.label} for lv in self.levers],
             "trials": self.trials,
@@ -103,4 +170,6 @@ def optimize(
         best_result=best_result,
         best_J=best_J,
         trials=trials,
+        baseline_breakdown=cost_breakdown(baseline_result, lenses),
+        best_breakdown=cost_breakdown(best_result, lenses),
     )
