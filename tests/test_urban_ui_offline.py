@@ -201,6 +201,9 @@ def test_shell_references_vendored_assets(shell: str) -> None:
         'dialog id="help"',                      # clarity: orientation/legend/provenance
         'class="legend"',                        # clarity: colour-encoding legend
         'class="chip"',                          # clarity: dataset provenance chips
+        'id="evac"',                             # Phase 2: cuOpt evacuation-ceiling readout
+        'id="hot-btn"',                          # Phase 2: cuML risk-hotspots toggle
+        "civ-clusters",                          # Phase 2: hotspot map layer
     ],
 )
 def test_shell_clarity_and_a11y_present(shell: str, marker: str) -> None:

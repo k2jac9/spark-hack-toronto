@@ -210,6 +210,18 @@
     .chip { font-size: 11px; background: var(--surface-sel); border: 1px solid var(--border-2);
       border-radius: var(--pill); padding: 2px 9px; color: var(--text-soft); }
     .illus { font-size: 11px; color: var(--text-dim); font-style: italic; margin-top: 4px; }
+    /* ADR-0026 Phase 2: cuOpt evacuation-ceiling readout + cuML hotspot list. */
+    .evac { margin-top: 12px; padding: 11px 13px; border-radius: var(--r-lg);
+      background: var(--surface-2); border: 1px solid var(--border-2); border-left: 4px solid var(--accent-2); }
+    .evac .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+    .evac .v { font-size: 22px; font-weight: 800; font-family: var(--num); color: var(--accent-2); }
+    .evac .gpu { font-size: 10px; border: 1px solid var(--border-2); border-radius: var(--pill);
+      padding: 1px 7px; color: var(--text-dim); margin-left: 6px; vertical-align: 2px; }
+    #hotspots { list-style: none; margin: 6px 0; padding: 0; }
+    #hotspots li { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 0;
+      border-bottom: 1px solid var(--border-2); animation: rise .4s both; }
+    #hotspots .rank { width: 18px; height: 18px; border-radius: 50%; flex: none; color: #06121f;
+      font-weight: 800; font-size: 11px; display: flex; align-items: center; justify-content: center; }
 
     /* Responsive: tablet narrows the panel; phone moves the dock to a top rail and
        the panel to a bottom sheet so the map stays visible (audit: broke <1200px). */
@@ -441,6 +453,16 @@
     map.addLayer({ id:'civ-sel', source:'civ-sel', type:'circle',
       paint:{ 'circle-radius':12,'circle-color':'rgba(0,0,0,0)','circle-stroke-width':3,'circle-stroke-color':css('--accent','#38bdf8') } });
 
+    // ADR-0026 Phase 2: cuML risk-hotspot zones (from /clusters), hidden until toggled.
+    map.addSource('civ-clusters', { type:'geojson', data:{ type:'FeatureCollection', features:[] } });
+    map.addLayer({ id:'civ-clusters', source:'civ-clusters', type:'circle', layout:{ visibility:'none' },
+      paint:{ 'circle-radius':['interpolate',['linear'],['get','radius'],0,18,1,52],
+        'circle-color':['get','color'],'circle-opacity':.18,
+        'circle-stroke-width':2,'circle-stroke-color':['get','color'],'circle-stroke-opacity':.8 } });
+    map.addLayer({ id:'civ-clusters-lbl', source:'civ-clusters', type:'symbol', layout:{ visibility:'none',
+      'text-field':['get','tag'],'text-font':['OpenSans'],'text-size':12,'text-allow-overlap':true },
+      paint:{ 'text-color':css('--text-strong','#f1f5f9'),'text-halo-color':'#0b1220','text-halo-width':1.6 } });
+
     map.on('mouseenter', 'os-nodes', (e) => { map.getCanvas().style.cursor='pointer';
       const p = e.features[0].properties, c = Number(p.congestion);
       hover.setLngLat(e.lngLat).setHTML('<b>'+esc(p.label)+'</b><br>congestion '+mult2(c)+'×'+(c>1?' over capacity':'')).addTo(map); });
@@ -487,6 +509,59 @@
     if (c) { c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop'); } }
   function flashRoom() { const f = document.getElementById('flash');
     if (f) { f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); } }
+  const _reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function tweenInt(el, target) {
+    const to = Number(target || 0);
+    if (!el) return;
+    if (_reduceMotion()) { el.textContent = to.toLocaleString(); return; }
+    const t0 = performance.now(), dur = 600;
+    const step = (now) => { const p = Math.min(1, (now - t0) / dur);
+      el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))).toLocaleString();
+      if (p < 1) requestAnimationFrame(step); else el.textContent = to.toLocaleString(); };
+    requestAnimationFrame(step);
+  }
+
+  // ADR-0026 Phase 2: the cuOpt optimal-evacuation ceiling (GET /flow) — frames the
+  // crush as a TIMING problem (the network can clear everyone over the window).
+  async function loadFlow() {
+    const v = document.getElementById('evac-v'); if (!v) return;
+    try {
+      const f = await (await fetch('/flow')).json();
+      tweenInt(v, f.max_throughput);
+      const gpu = document.getElementById('evac-gpu'), note = document.getElementById('evac-note');
+      if (gpu) gpu.textContent = f.backend === 'cuopt' ? 'cuOpt · GPU' : 'CPU';
+      if (note) note.innerHTML = f.cleared
+        ? 'The network <b>can</b> clear all ' + f.demand.toLocaleString() + ' over ' + f.horizon_min +
+          ' min — so the crush is a <b>timing</b> problem the lever fixes, not a capacity wall.'
+        : 'Capacity-limited: ' + f.max_throughput.toLocaleString() + ' of ' + f.demand.toLocaleString() + ' clearable in the window.';
+    } catch (e) { const n = document.getElementById('evac-note'); if (n) n.textContent = 'evacuation ceiling unavailable.'; }
+  }
+
+  // ADR-0026 Phase 2: cuML risk-hotspots (GET /clusters) — collapse the pins into a
+  // few geographic zones on the map + a ranked list.
+  let HOTSPOTS_ON = false;
+  async function toggleHotspots(btn) {
+    HOTSPOTS_ON = !HOTSPOTS_ON;
+    const box = document.getElementById('hotbox');
+    if (btn) btn.setAttribute('aria-pressed', String(HOTSPOTS_ON));
+    if (!HOTSPOTS_ON) {
+      vis('civ-clusters', false); vis('civ-clusters-lbl', false);
+      if (box) box.innerHTML = ''; return;
+    }
+    if (box) box.innerHTML = '<p class="hint"><span class="spinner"></span>Clustering risk into hotspots…</p>';
+    let cl; try { cl = await (await fetch('/civic/clusters?k=4')).json(); }
+    catch (e) { if (box) box.innerHTML = '<div class="err">Hotspots unavailable.</div>'; return; }
+    if (!Array.isArray(cl) || !cl.length) { if (box) box.innerHTML = '<p class="hint">No hotspots.</p>'; return; }
+    const feats = cl.map((c, i) => ({ type:'Feature',
+      geometry:{ type:'Point', coordinates:[c.centroid_lng, c.centroid_lat] },
+      properties:{ tag:'H' + (i + 1), radius:Math.max(0, Math.min(1, c.mean_risk)),
+        color: css('--risk-' + bandOf(c.mean_risk), '#f59e0b') } }));
+    setData('civ-clusters', feats);
+    vis('civ-clusters', true); vis('civ-clusters-lbl', true);
+    if (box) box.innerHTML = '<h3 class="panel-h">Risk hotspots <span class="hint" style="text-transform:none;font-weight:400">· cuML clustering</span></h3>' +
+      '<ul id="hotspots">' + cl.map((c, i) => '<li><span class="rank bg-' + bandOf(c.mean_risk) + '">H' + (i + 1) +
+        '</span><span style="flex:1">' + c.size + ' sites · mean risk <b class="num">' + c.mean_risk.toFixed(2) + '</b></span></li>').join('') + '</ul>';
+  }
 
   // ============================ LENSES ============================
   const panel = document.getElementById('panel');
@@ -568,11 +643,18 @@
               // ADR-0026: keep the dollars honest — they are calibrated, illustrative.
               '<p class="illus">Figures are calibrated, illustrative — the shape is the claim.</p></div>'+
           '<div class="row"><button class="act" id="opt">✨ Find the best intervention</button></div>'+
+          // ADR-0026 Phase 2: the cuOpt optimal-evacuation ceiling — frames the crush as
+          // a TIMING problem (the network CAN clear everyone over the window), which is
+          // exactly what the staggered-release lever fixes.
+          '<div class="evac" id="evac"><div class="k">Optimal evacuation ceiling<span class="gpu" id="evac-gpu">—</span></div>'+
+            '<div class="v" id="evac-v">…</div>'+
+            '<p class="hint" id="evac-note">computing the network’s best-case throughput…</p></div>'+
           '<p class="hint">Drag the lever: the city calms and all three lenses move together. “Find the best” runs the optimizer and lights the room.</p>'
         );
         bindLevers((r, s) => rippleTo(r, s));   // live on drag (rippleTo debounces)
         document.getElementById('opt').addEventListener('click', runOptimize);
         rippleTo(RELEASE, SHELTER, true);
+        loadFlow();   // ADR-0026 Phase 2: cuOpt optimal-evacuation ceiling
       }
     },
     // ---- SAFETY: civic address risk + grounded click-to-verify ----
@@ -595,12 +677,16 @@
             '<span class="key"><span class="sw bg-low"></span>low</span>'+
             '<span class="key"><span class="sw bg-medium"></span>medium</span>'+
             '<span class="key"><span class="sw bg-high"></span>high</span></div>'+
-          '<div class="row"><button class="gh" data-label="500 Bloor St W">★ 500 Bloor St W (3-dataset hero)</button></div>'+
+          '<div class="row"><button class="gh" data-label="500 Bloor St W">★ 500 Bloor St W (3-dataset hero)</button>'+
+            // ADR-0026 Phase 2: cuML risk-hotspot zones toggle.
+            '<button class="gh" id="hot-btn" aria-pressed="false">◉ Risk hotspots</button></div>'+
+          '<div id="hotbox"></div>'+
           '<h3 class="panel-h">Highest-risk addresses<span class="hint" style="text-transform:none;font-weight:400"> · ranked by most-elevated index</span></h3><ul id="addrlist">'+rows+'</ul>'+
           '<div id="detail"><p class="hint">Pick a pin or address for its grounded risk read.</p></div>'
         );
         panel.querySelector('#addrlist').addEventListener('click', e => { const b = e.target.closest('button[data-label]'); if (b) analyzeAddress(b.dataset.label); });
         panel.querySelectorAll('.gh[data-label]').forEach(b => b.addEventListener('click', () => analyzeAddress(b.dataset.label)));
+        const hb = document.getElementById('hot-btn'); if (hb) hb.addEventListener('click', () => toggleHotspots(hb));
       }
     },
     // ---- FLOW: the egress simulation + levers + optimizer ----
@@ -712,6 +798,9 @@
   function setLens(id) {
     if (LENS === id) return;
     LENS = id;
+    // ADR-0026 Phase 2: cluster overlay belongs to the Safety lens — clear it on any
+    // switch so hotspot circles never linger on the City/Flow map.
+    HOTSPOTS_ON = false; vis('civ-clusters', false); vis('civ-clusters-lbl', false);
     document.querySelectorAll('.lens').forEach(b => b.setAttribute('aria-current', String(b.dataset.lens === id)));
     LENSES[id].enter();
   }
