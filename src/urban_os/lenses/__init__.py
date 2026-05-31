@@ -12,11 +12,16 @@ A lens plugs domain behaviour into the kernel through the four-operator contract
   ``lever`` (a ``source`` + ``couple`` + ``observe`` + ``J`` term). Place it
   *after* :class:`EconomicLens` in the stack so its risk multiplier lands on a
   populated ``risk`` field.
+- :class:`BusinessFlow` — local trade lost to the post-event crush (the sports
+  angle): a read-only ``couple`` + ``observe`` + ``J`` term that prices the shop
+  and food-premises revenue a crush destroys, so the staggered-release lever gets
+  credit for the business it preserves.
 """
 from __future__ import annotations
 
+from .business_flow import BusinessFlow
 from .economic import EconomicLens
 from .event_surge import EventSurge
 from .weather import WeatherLens
 
-__all__ = ["EventSurge", "EconomicLens", "WeatherLens"]
+__all__ = ["EventSurge", "EconomicLens", "WeatherLens", "BusinessFlow"]

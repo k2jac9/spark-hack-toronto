@@ -17,16 +17,21 @@ import sys
 
 from .adapters import downtown_scenario
 from .kernel import Simulation
-from .lenses import EconomicLens, EventSurge
+from .lenses import BusinessFlow, EconomicLens, EventSurge
 from .narrate import build_insight
 from .optimize import objective, optimize
 
 
-def _lenses(sc):
-    return [
+def _lenses(sc, *, business: bool = False):
+    ls = [
         EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end),
         EconomicLens(),
     ]
+    if business:
+        # Sports-Urban-Intelligence: price the local trade a crush destroys so the
+        # release lever is optimized for transit + safety + economics together.
+        ls.append(BusinessFlow(sc.venue_id))
+    return ls
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -39,10 +44,12 @@ def main(argv: list[str] | None = None) -> int:
         help="force a fixed staggered-release (min); skips the optimizer search",
     )
     p.add_argument("--json", action="store_true", help="emit JSON instead of a briefing")
+    p.add_argument("--business", action="store_true",
+                   help="add the Sports/Business-Flow lens (local trade lost to the crush)")
     args = p.parse_args(argv)
 
     sc = downtown_scenario(**({"crowd_size": args.crowd} if args.crowd else {}))
-    lenses = _lenses(sc)
+    lenses = _lenses(sc, business=args.business)
 
     if args.release is not None:
         # Single deterministic run at a fixed lever — no search.
@@ -58,6 +65,13 @@ def main(argv: list[str] | None = None) -> int:
     insight = build_insight(opt, event_end=sc.event_end)
     peak = opt.baseline_result.peak_congestion()
 
+    biz = None
+    if args.business:
+        base_lost = float(sum(opt.baseline_result.series("business_lost")))
+        best_lost = float(sum(opt.best_result.series("business_lost")))
+        biz = {"baseline_lost": base_lost, "best_lost": best_lost,
+               "recovered": base_lost - best_lost}
+
     if args.json:
         print(json.dumps({
             "insight": insight.text,
@@ -68,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
             "savings": opt.savings,
             "best_params": opt.best_params,
             "baseline_peak": peak,
+            "business": biz,
         }, indent=2))
         return 0
 
@@ -79,6 +94,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  do-nothing cost J: ${opt.baseline_J:,.0f}")
     print(f"  best intervention: release_minutes={opt.best_params.get('release_minutes')} "
           f"→ J ${opt.best_J:,.0f}  (saves ${opt.savings:,.0f})")
+    if biz is not None:
+        print(f"  business: a crush destroys ${biz['baseline_lost']:,.0f} in local trade; "
+              f"the optimized release recovers ${biz['recovered']:,.0f}.")
     src = "local model" if insight.grounded else "deterministic fallback"
     print(f"\n  INSIGHT [{src}]:\n  {insight.text}")
     return 0
