@@ -53,7 +53,7 @@ Generated audio writes to [`audio/`](audio/) (gitignored). **This file is the co
 >
 > And the heavy numerics ride NVIDIA RAPIDS: the graph on cugraph, ingest on cuDF, the evacuation-flow solve on cuOpt, risk hotspots on cuML — each an opt-in seam with a CPU fallback, so the demo never needs the GPU. On this small demo graph there's no speedup; the payoff is at city scale.
 >
-> It's all local on the GX10: Nemotron-3-Nano for interactive narration — warm in under two seconds, served behind NVIDIA TensorRT-LLM for the fastest decode on the box — and a larger mixture-of-experts Nemotron for batch digests. We deliberately chose small-active MoE models for the box's memory bandwidth, and built it ARM64, end to end.
+> It's all local on the GX10: Nemotron-3-Nano for interactive narration — warm in under two seconds, served behind NVIDIA TensorRT-LLM — a runtime-portable narrator, with an Ollama fallback — and a larger mixture-of-experts Nemotron for batch digests. We deliberately chose small-active MoE models for the box's memory bandwidth, and built it ARM64, end to end.
 >
 > The hardest part was honesty at speed: keeping every dollar figure traceable while the model talks. So a number is either computed and cited — or it doesn't render. The same guarantee holds even when an agent drives it: NemoClaw calls our tools over MCP and answers grounded.
 >

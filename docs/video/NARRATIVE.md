@@ -96,9 +96,9 @@ Pull from these when recording — all already battle-tested in `PITCH.md`/`DEMO
 | Criterion | The moment in the video that earns it |
 |---|---|
 | **On-device / DGX Spark** | The unplug; "still running"; the architecture beat. |
-| **Best use of Nemotron** | The narrator phrasing + the verifier "9 vs 8" catch; served behind **TensorRT-LLM** (fastest local decode). |
-| **ARM64 / optimization** | How-we-built-it: aarch64 wheels, MoE small-active model choice, deterministic kernel (numpy/Rust core), sub-2s warm, **TensorRT-LLM decode**. |
-| **The Stack (NVIDIA libraries)** | How-we-built-it GPU beat: six NVIDIA libs *invoked* — NeMo (Nemotron) + RAPIDS **cugraph / cuDF / cuOpt / cuML** + **TensorRT-LLM** (narrator runtime), opt-in with CPU/Ollama fallback, `make gpu-check` / `make llm-check` proof; **PhysicsNeMo** surrogate wired as a seam (next-step, no checkpoint). **Honest:** RAPIDS numerics show no demo-scale speedup (city-scale win); the **one live speedup is TensorRT-LLM decode tok/s**. |
+| **Best use of Nemotron** | The narrator phrasing + the verifier "9 vs 8" catch; served behind **TensorRT-LLM** (NVFP4/Blackwell FP4) — a runtime-portable narrator with an Ollama fallback (capability, not a decode speedup). |
+| **ARM64 / optimization** | How-we-built-it: aarch64 wheels, MoE small-active model choice, deterministic kernel (numpy/Rust core), sub-2s warm, **Nemotron served via TensorRT-LLM** (runtime portability — not a speedup claim). |
+| **The Stack (NVIDIA libraries)** | How-we-built-it GPU beat: six NVIDIA libs *invoked* — NeMo (Nemotron) + RAPIDS **cugraph / cuDF / cuOpt / cuML** + **TensorRT-LLM** (narrator runtime), opt-in with CPU/Ollama fallback, `make gpu-check` / `make llm-check` proof; **PhysicsNeMo** surrogate wired as a seam (next-step, no checkpoint). **Honest:** RAPIDS numerics show no demo-scale speedup (city-scale win); TensorRT-LLM is a **capability** (Nemotron served on the box), **not** a decode speedup — single-stream is *not* faster than Ollama (54.5 vs 61.2 tok/s); throughput-under-load is unproven (next-step). |
 | **Flagship: raw data → on-box → action** | Datasets fused → kernel sim → optimized lever with a $ result. |
 | **Verifiers bounty** | ✓-verify live; "a hallucinated number cannot reach the screen"; same guarantee through NemoClaw. |
 | **Platform / digital twin** | Four lenses on one kernel; "a new lens is ~90 lines." |
@@ -110,9 +110,12 @@ Pull from these when recording — all already battle-tested in `PITCH.md`/`DEMO
 - Don't read a figure off this repo if the live screen disagrees — **say the screen.**
 - Don't bury the product behind a long intro — pixels by ~0:20.
 - Don't overscope the narration; one flawless scenario beats five half-shown features.
-- **Be precise about *which* speedup.** The RAPIDS **numerics** seams (cugraph/cuDF/cuOpt/cuML) have
+- **Be precise about *which* claim.** The RAPIDS **numerics** seams (cugraph/cuDF/cuOpt/cuML) have
   **no win at demo scale** — say "wired, opt-in, city-scale," show `make gpu-check`, never imply a
-  benchmark we can't reproduce. The **one genuine, on-camera speedup** is **TensorRT-LLM** serving the
-  narrator (decode tok/s vs Ollama, `make llm-check`, ADR-0027) — claim it **only if the box-side TRT
-  engine is actually built and the number is live on screen.** PhysicsNeMo/Modulus is a **seam +
-  next-step only** (no trained checkpoint ships) — never imply a working surrogate.
+  benchmark we can't reproduce. **TensorRT-LLM** is a **capability, not a speedup**: the box engine IS
+  built and Nemotron-3-Nano serves via TRT-LLM (NVFP4/Blackwell FP4, OpenAI-compatible, Ollama
+  fallback — a runtime-portable narrator, ADR-0027), but measured **single-stream decode is NOT faster
+  than Ollama (54.5 vs 61.2 tok/s)** — claim the **capability** (Nemotron served via TRT-LLM on the
+  box), shown by `make llm-check`, **never a decode speedup**. TRT-LLM's throughput-under-load
+  advantage is **unproven (next-step)**. PhysicsNeMo/Modulus is a **seam + next-step only** (no trained
+  checkpoint ships) — never imply a working surrogate.
