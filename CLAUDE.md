@@ -60,8 +60,9 @@ Layout: `src/civic_analyst/{ingest,graph,agents,api}`, `tests/`, `scripts/`, `de
 
 ## Current status (handoff — 2026-05-31, demo day)
 **Full read for the next session:** `docs/HANDOFF.md` (@cyberqubit → @k2jac9), `docs/PITCH.md`
-(the pitch), `docs/ON_THE_BOX.md` (box runbook). A fresh clone builds + passes all tests
-(`make test` ≈ 429 green). Everything below is **merged on `main` + CI-green**.
+(the pitch), `docs/ON_THE_BOX.md` (box runbook), `docs/video/` (submission video kit). A fresh
+clone builds + passes all tests (`make test` ≈ **439 green**). Everything below is **merged on
+`main` + CI-green**, and the **box is deployed on the live GPU stack** (see "GPU stack" below).
 
 **The project is two apps that share one architecture:**
 - **`civic_analyst` (`:8000`)** — the address risk app: 3 fused Toronto datasets (DineSafe +
@@ -82,11 +83,33 @@ Nemotron agent calls our `toronto-civic` MCP tools and answers **grounded** (mat
 exactly). Steps + the demo command in `docs/ON_THE_BOX.md §3`. NB: the box's `~/.openclaw/openclaw.json`
 got **additive** changes (MCP server + an ollama/nemotron provider; backed up; defaults untouched).
 
-**Left — box-side only (see `docs/HANDOFF.md`, issue #61):** **pull `main` on the box + restart
-`:8000` (`systemctl --user restart civic-demo`) and the `:8001` process** so the live demo matches
-the repo (the box still serves the *old* Urban-OS numbers). The civic-demo `:8000` is a supervised
-user service (linger + Restart=always); the public judge URL is the Tailscale Funnel
-`https://gx10-4428.taila9fe06.ts.net`. Optional stretch: QLoRA fine-tune.
+**Shipped this session (ADR-0019 → 0027, all merged + CI-green):** two-index **benefit-number
+semantics** (0019); **civic narrator-guard parity** kind-match + decimal-safe (0020); **kernel
+conservation-under-noise + per-State capacity overlay** (0021); **api.py split + one shared lens
+stack** (0022); **two-app decoupling** via public `ensure_loaded()` + injected provider (0023);
+**RAPIDS GPU seams** (0024) — nx-cugraph (substrate dijkstra via super-source SSSP) + cuDF-via-Polars
+(ingest); **cuOpt evacuation max-flow `/flow` + cuML risk-hotspot `/clusters`** (0025); **public-UI
+clarity + animations** (0026, "How it works" dialog, legends, provenance, honesty notes, motion
+gated by `prefers-reduced-motion`, /flow+/clusters surfaced); **TensorRT-LLM narrator runtime +
+PhysicsNeMo J-surrogate seams** (0027). Plus civic public-API hardening + data-layer robustness.
+
+**GPU stack — LIVE on the box.** The `civic-demo`/`urbanos-demo` user services run on the
+`~/rapids-probe` venv (full RAPIDS + Polars) with the opt-in flags set, so the public demo genuinely
+executes on the GB10: `/flow`→`cuopt`, `/clusters`→`cuml`, ingest→`cudf-polars`, substrate→`cugraph`
+(all proven via `make gpu-check`). **Rollback:** `cp ~/.config/systemd/user/*.service.bak …` →
+`daemon-reload` + restart (the old CPU `.venv`). Public Funnels (both live): civic
+`https://gx10-4428.taila9fe06.ts.net` · urban `…:8443`. `make funnel-off-all` tears both down.
+Every GPU/seam is opt-in + CPU-fallback, so CI/dev never need CUDA. **Numbers/honesty unchanged.**
+
+**NEXT — resume here (TensorRT-LLM NGC bring-up, ADR-0027 §"what's next"):** the narrator client is
+OpenAI-API-only, so TRT-LLM is **config not code**. On the box, in the pulled NGC TRT-LLM container
+(must be **aarch64 + support GB10 sm_121**): build the Nemotron engine, run `trtllm-serve` (e.g.
+`:8080`), then set `LLM_RUNTIME=tensorrt-llm` + `LLM_BASE_URL=http://localhost:8080/v1` on the
+services and `systemctl --user restart`. Verify with **`make llm-check`** (`llm.LLM_BACKEND` ==
+`tensorrt-llm`, `/optimize` still `grounded: True`) and capture the **decode tok/s vs Ollama** — the
+one on-camera GPU-speedup number. Keep Ollama up as fallback; watch VRAM. **PhysicsNeMo** ships
+**interface-only** (no checkpoint → exact kernel decides every result; training a checkpoint is the
+documented stretch). Optional stretch: QLoRA fine-tune.
 
 **Demo tips:** civic hero pin **500 Bloor St W** (3-dataset fusion). NB scoring is **two-index now
 (Safety + Activity, ADR-0014)** — 500 Bloor reads **medium Activity / low Safety**, *not* the old
