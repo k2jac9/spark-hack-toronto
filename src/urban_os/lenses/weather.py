@@ -58,7 +58,14 @@ _EXPOSURE_COST = 0.05
 # the rain peak — makes shelter *cheaper*, not more expensive (audit finding:
 # the old static-crowd staffing was non-monotonic in release). Calibrated in
 # ADR-0015 so shelter is a genuine interior optimum.
-_SHELTER_COST = 0.14
+_SHELTER_COST = 0.10
+# Convex "coverage premium": staffing grows super-linearly with coverage —
+# scaling shelter toward 100% needs disproportionately more marshals and covered
+# structures, so each extra increment costs more (marginal cost RISES with
+# coverage). This convex cost, set against shelter's *concave* (diminishing)
+# safety/exposure benefit, is what makes the optimum a genuine INTERIOR point
+# (partial coverage) instead of an all-or-nothing corner. Calibrated in ADR-0016.
+_COVERAGE_PREMIUM = 0.9
 
 
 class WeatherLens(Lens):
@@ -179,9 +186,14 @@ class WeatherLens(Lens):
 
     # ------------------------------------------------------------------ levers
     def levers(self) -> list[Lever]:
-        """Shelter coverage fraction in 0.25 steps, 0 (none) → max_shelter."""
+        """Shelter coverage fraction in 0.1 steps, 0 (none) → max_shelter.
+
+        Fine-grained (0.1) so the optimizer can land on a precise interior
+        coverage (the convex coverage premium makes the J-minimum a partial
+        value, not a 0/1 corner).
+        """
         top = self.max_shelter
-        grid = [v for v in np.arange(0.0, top + 1e-9, 0.25) if v <= top + 1e-9]
+        grid = [round(v, 2) for v in np.arange(0.0, top + 1e-9, 0.1) if v <= top + 1e-9]
         if not grid:
             grid = [0.0]
         return [Lever(name="shelter_fraction", values=grid, label="Shelter coverage")]
@@ -217,5 +229,8 @@ class WeatherLens(Lens):
             else:  # pragma: no cover - defensive: no recorded series
                 rain_minutes = sum(self._rain_at(t) for t in result.times) * dt
                 staffing_basis = self.crowd_size * rain_minutes
-            staffing = shelter * _SHELTER_COST * staffing_basis
+            # Convex coverage premium (1 + p·shelter): the marginal cost of shelter
+            # rises with coverage, so against shelter's diminishing safety benefit
+            # the J-minimum lands at a partial (interior) coverage, not a corner.
+            staffing = shelter * _SHELTER_COST * staffing_basis * (1.0 + _COVERAGE_PREMIUM * shelter)
         return exposure_dollars + staffing
