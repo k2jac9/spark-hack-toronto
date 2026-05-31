@@ -130,8 +130,18 @@ def test_scenario_shape_and_referential_integrity():
 def test_simulate_shape_is_pinned():
     body = _get("/simulate", release_minutes=0)
     assert set(body.keys()) == {
-        "times", "frames", "metrics", "peak", "release_minutes"
+        "times", "frames", "metrics", "peak", "release_minutes",
+        "shelter_fraction", "cost_breakdown",
     }
+    # The J cost-breakdown names every term and sums to total.
+    cb = body["cost_breakdown"]
+    assert set(cb.keys()) == {
+        "delay", "hold", "exposure", "staffing", "safety", "total"
+    }
+    assert cb["total"] == pytest.approx(
+        cb["delay"] + cb["hold"] + cb["exposure"] + cb["staffing"] + cb["safety"],
+        abs=0.1,
+    )
     assert body["frames"], "expected at least one frame"
     n_nodes = _get("/health")["nodes"]
 
@@ -258,6 +268,7 @@ def test_optimize_shape_is_pinned():
     assert set(body.keys()) == {
         "insight", "grounded", "figures", "optimization",
         "baseline_peak", "best_peak", "best_params", "savings",
+        "cost_breakdown", "baseline_cost_breakdown",
     }
     assert isinstance(body["insight"], str) and body["insight"].strip()
     assert isinstance(body["grounded"], bool)
@@ -265,14 +276,24 @@ def test_optimize_shape_is_pinned():
 
     fig_keys = {
         "station", "base_mult", "best_mult", "minutes_after",
-        "reduction_pct", "release_min", "baseline_cost_k", "savings_k",
+        "reduction_pct", "release_min", "shelter_pct", "baseline_cost_k",
+        "savings_k",
     }
     assert set(body["figures"].keys()) == fig_keys
 
+    breakdown_keys = {"delay", "hold", "exposure", "staffing", "safety", "total"}
+    for key in ("cost_breakdown", "baseline_cost_breakdown"):
+        assert set(body[key].keys()) == breakdown_keys
+        cb = body[key]
+        assert cb["total"] == pytest.approx(
+            cb["delay"] + cb["hold"] + cb["exposure"] + cb["staffing"] + cb["safety"],
+            abs=0.5,
+        )
+
     opt = body["optimization"]
     assert set(opt.keys()) == {"baseline", "best", "savings", "levers", "trials"}
-    assert set(opt["baseline"].keys()) == {"params", "J"}
-    assert set(opt["best"].keys()) == {"params", "J"}
+    assert set(opt["baseline"].keys()) == {"params", "J", "breakdown"}
+    assert set(opt["best"].keys()) == {"params", "J", "breakdown"}
     for lv in opt["levers"]:
         assert set(lv.keys()) == {"name", "label"}
     for tr in opt["trials"]:

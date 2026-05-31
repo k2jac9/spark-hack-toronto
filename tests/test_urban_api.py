@@ -106,6 +106,61 @@ def test_simulate_validates_release_bounds():
     assert client.get("/simulate", params={"release_minutes": 99}).status_code == 422
 
 
+def test_simulate_accepts_and_echoes_shelter_fraction():
+    """/simulate takes the shelter lever, echoes it back, and validates bounds —
+    so any (release, shelter) the optimizer evaluates is reproducible on the map."""
+    body = client.get(
+        "/simulate", params={"release_minutes": 16, "shelter_fraction": 0.75}
+    ).json()
+    assert body["shelter_fraction"] == pytest.approx(0.75, abs=1e-6)
+    assert body["release_minutes"] == pytest.approx(16.0, abs=1e-6)
+    # Out-of-range / non-finite shelter is rejected at the boundary.
+    assert client.get(
+        "/simulate", params={"shelter_fraction": -0.1}
+    ).status_code == 422
+    assert client.get(
+        "/simulate", params={"shelter_fraction": 1.5}
+    ).status_code == 422
+    assert client.get(
+        "/simulate", params={"shelter_fraction": "nan"}
+    ).status_code == 422
+
+
+def test_simulate_shelter_changes_the_run():
+    """Deploying shelter must actually change the simulation (less rain risk and
+    a different cost breakdown) — not be a silently ignored parameter."""
+    none = client.get(
+        "/simulate", params={"release_minutes": 0, "shelter_fraction": 0.0}
+    ).json()
+    full = client.get(
+        "/simulate", params={"release_minutes": 0, "shelter_fraction": 1.0}
+    ).json()
+    # Full shelter neutralises the rain-risk amplification ⇒ strictly lower peak
+    # risk somewhere in the run, and a different J breakdown.
+    none_peak_risk = max(
+        nd["risk"] for fr in none["frames"] for nd in fr["nodes"]
+    )
+    full_peak_risk = max(
+        nd["risk"] for fr in full["frames"] for nd in fr["nodes"]
+    )
+    assert full_peak_risk < none_peak_risk
+    assert none["cost_breakdown"] != full["cost_breakdown"]
+    # Sheltered run pays staffing but no exposure; unsheltered the reverse.
+    assert full["cost_breakdown"]["staffing"] > 0
+    assert full["cost_breakdown"]["exposure"] == pytest.approx(0.0, abs=1e-6)
+    assert none["cost_breakdown"]["exposure"] > 0
+
+
+def test_simulate_sink_west_load_stays_near_zero():
+    """The egress wave is seeded only at non-sink nodes (graph bug fix), so the
+    orphaned sink_west (0 inbound edges on the published graph) never receives a
+    direct injection — map routing == engine routing."""
+    body = client.get("/simulate", params={"release_minutes": 0}).json()
+    for fr in body["frames"]:
+        sw = next(nd for nd in fr["nodes"] if nd["id"] == "sink_west")
+        assert sw["load"] == pytest.approx(0.0, abs=1e-3)
+
+
 def test_optimize_returns_insight_and_positive_savings():
     r = client.get("/optimize")
     assert r.status_code == 200
