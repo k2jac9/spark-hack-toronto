@@ -40,24 +40,49 @@ def _gpu_graph_enabled() -> bool:
     )
 
 
+# Sentinel id for the virtual super-source (NUL-prefixed so it can't collide with a
+# real node id). See ``_supersource_sssp``.
+_SUPERSOURCE = "\x00__supersource__"
+
+
+def _supersource_sssp(rev: nx.DiGraph, sources: set, *, backend: str | None = None) -> dict:
+    """Multi-source-to-nearest shortest paths via a virtual super-source + a SINGLE
+    -source Dijkstra — the reformulation RAPIDS ``cugraph`` supports (it implements
+    ``single_source_dijkstra_path_length`` but not the multi-source variant). Adding a
+    zero-length edge from the super-source to every sink makes single-source distance
+    == min-over-sinks distance, i.e. byte-identical to
+    ``multi_source_dijkstra_path_length(rev, sources)``. Runs on a private copy, so the
+    caller's graph is never mutated."""
+    tmp = nx.DiGraph()
+    tmp.add_weighted_edges_from(
+        ((u, v, float(d.get("length", 1.0))) for u, v, d in rev.edges(data=True)),
+        weight="length",
+    )
+    for s in sources:
+        tmp.add_edge(_SUPERSOURCE, s, length=0.0)
+    kwargs = {"backend": backend} if backend else {}
+    out = nx.single_source_dijkstra_path_length(tmp, _SUPERSOURCE, weight="length", **kwargs)
+    out.pop(_SUPERSOURCE, None)
+    return dict(out)
+
+
 def _multi_source_dijkstra_lengths(rev: nx.DiGraph, sources: set) -> dict:
     """Multi-source shortest-path lengths over edge ``length`` to the sink set.
 
-    Uses the RAPIDS ``nx-cugraph`` GPU backend when enabled AND installed AND it
-    implements this algorithm; otherwise (or on any error) falls back to networkx on
-    the CPU. Records the backend that actually ran in ``GRAPH_BACKEND``. The result
-    is identical either way — this is a drop-in accelerator seam, never a behaviour
-    change (a wrong/empty GPU result would be a bug; we fall back, we don't trust a
-    partial answer)."""
+    GPU path (``URBANOS_GPU_GRAPH=1`` + ``nx-cugraph`` installed): the super-source
+    single-source reformulation runs on the ``cugraph`` GPU backend. Otherwise (or on
+    any error) the well-tested networkx CPU ``multi_source_dijkstra_path_length`` runs.
+    Records the backend in ``GRAPH_BACKEND``. Identical result either way — a drop-in
+    accelerator, never a behaviour change (we fall back rather than trust a partial
+    GPU result). On the demo-size graph CPU is used/faster; cugraph pays off at city
+    scale (real GTFS, thousands of nodes)."""
     global GRAPH_BACKEND
     if _gpu_graph_enabled():
         try:
-            lengths = nx.multi_source_dijkstra_path_length(
-                rev, sources, weight="length", backend="cugraph"
-            )
+            lengths = _supersource_sssp(rev, sources, backend="cugraph")
             GRAPH_BACKEND = "cugraph"
             return lengths
-        except Exception as exc:  # backend missing / algo unsupported / runtime error
+        except Exception as exc:  # backend missing / unsupported / runtime error
             _log.warning("nx-cugraph backend unavailable, using CPU networkx: %s", exc)
     GRAPH_BACKEND = "networkx"
     return nx.multi_source_dijkstra_path_length(rev, sources, weight="length")

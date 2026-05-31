@@ -48,6 +48,23 @@ def test_dijkstra_seam_matches_plain_networkx():
     assert via_seam == via_nx
 
 
+def test_supersource_reformulation_equals_multisource():
+    """The GPU path uses a super-source + single-source Dijkstra (the form cugraph
+    supports). On CPU it must produce byte-identical lengths to multi_source — proven
+    here on a multi-sink graph so we trust the GPU path's correctness."""
+    g = nx.DiGraph()
+    for u, v, w in [("a", "b", 1.0), ("b", "x", 2.0), ("c", "x", 1.0),
+                    ("c", "y", 4.0), ("d", "y", 1.0)]:
+        g.add_edge(u, v, length=w)
+    rev = g.reverse(copy=False)
+    sinks = {"x", "y"}
+    reformulated = kstate._supersource_sssp(rev, sinks)        # CPU, no backend
+    multisource = nx.multi_source_dijkstra_path_length(rev, sinks, weight="length")
+    assert reformulated == multisource
+    # And the caller's graph was not mutated by the reformulation.
+    assert kstate._SUPERSOURCE not in rev
+
+
 def test_gpu_graph_disabled_by_default(monkeypatch):
     monkeypatch.delenv("URBANOS_GPU_GRAPH", raising=False)
     monkeypatch.delenv("NX_CUGRAPH_AUTOCONFIG", raising=False)
