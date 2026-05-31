@@ -8,14 +8,15 @@ on NVIDIA **TensorRT-LLM** via ``trtllm-serve`` (ADR-0027). This script:
 
   1. prints the configured runtime + endpoint,
   2. GETs ``/v1/models`` to prove the endpoint is live and which model it serves,
-  3. times a small warm generation and reports tok/s — the ONE place a real,
-     reproducible single-GPU decode speedup exists (TRT-LLM vs Ollama), the
-     "real number on screen" the scorecard asks for.
+  3. times a small warm generation and reports tok/s — as a *proof-of-invocation*,
+     NOT a speedup. (Box-measured 2026-05-31: TRT-LLM single-stream decode 54.5 tok/s
+     vs Ollama 61.2 — TRT-LLM is NOT faster single-stream; ADR-0027. Claim the
+     capability that the runtime is TensorRT-LLM, never a decode speedup.)
 
 Exits 0 regardless (a down endpoint is a valid offline outcome — the app falls back
-to its deterministic narrator); the VALUE is the printed runtime + tok/s. On the box
-with ``LLM_RUNTIME=tensorrt-llm`` and ``LLM_BASE_URL`` pointed at ``trtllm-serve``,
-expect ``tensorrt-llm`` and a higher tok/s than the Ollama baseline.
+to its deterministic narrator); the VALUE is the printed runtime. On the box with
+``LLM_RUNTIME=tensorrt-llm`` and ``LLM_BASE_URL`` pointed at the TRT-LLM server,
+expect ``tensorrt-llm`` (the tok/s is informational, not a speed claim).
 """
 from __future__ import annotations
 
@@ -51,7 +52,8 @@ def main() -> int:
         dt = time.perf_counter() - t0
         approx_tokens = max(1, len(out.split()))
         print(f"[decode] runtime={llm.LLM_BACKEND!r}  ~{approx_tokens} tok in {dt:.2f}s  "
-              f"-> ~{approx_tokens / dt:.1f} tok/s (rough; for slide use the server's own metrics)")
+              f"-> ~{approx_tokens / dt:.1f} tok/s (informational, NOT a speed claim — "
+              f"single-stream TRT-LLM is not faster than Ollama; ADR-0027)")
     except Exception as exc:
         print(f"[decode] generation failed ({type(exc).__name__}) — endpoint up but model "
               f"not ready.")

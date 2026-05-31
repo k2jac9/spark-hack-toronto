@@ -3,10 +3,12 @@
 # aarch64/Grace, CUDA). The narrator client is runtime-agnostic (OpenAI-compatible HTTP),
 # so this is the *activation* step: stand up `trtllm-serve`, then point the app at it.
 #
-# This is the one seam with a real on-GPU decode speedup vs Ollama — proven by
-# `make llm-check` (warm tok/s). If the engine build doesn't land in time, the app
-# falls back to Ollama / the deterministic narrator with ZERO code change, so the demo
-# is never blocked. Run on the box:
+# Box-proven (2026-05-31): Nemotron-3-Nano (NVFP4) serves this way. NB: this is a
+# CAPABILITY, not a speedup — measured single-stream decode is NOT faster than Ollama
+# (54.5 vs 61.2 tok/s; ADR-0027). `make llm-check` reports which runtime answered. The app
+# falls back to Ollama / the deterministic narrator with ZERO code change, so the demo is
+# never blocked. (On the GB10 prefer the NGC container — ADR-0027 §Box verification — bare-
+# metal aarch64 hits a torch-ABI wall.) Run on the box:
 #
 #     bash scripts/serve_trtllm.sh
 #     # in the app's env:  export LLM_RUNTIME=tensorrt-llm LLM_BASE_URL=http://localhost:8009/v1

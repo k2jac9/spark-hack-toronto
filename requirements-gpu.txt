@@ -29,10 +29,11 @@ cuml-cu12
 #
 # TensorRT-LLM — serve the Nemotron narrator behind `trtllm-serve` (OpenAI-compatible),
 # then set LLM_RUNTIME=tensorrt-llm + point LLM_BASE_URL at it. The narrator client is
-# unchanged (it only speaks OpenAI HTTP). NB: TRT-LLM also needs a per-model *engine
-# build* on the box — not a pure pip step — so this line is a marker; follow NVIDIA's
-# aarch64/Grace build for the GB10. This is the one seam with a real on-GPU decode speedup.
-# tensorrt-llm
+# unchanged (it only speaks OpenAI HTTP). NB: do NOT pip-install bare-metal on aarch64 —
+# it hits a torch-C++-ABI wall (ADR-0027 §Box verification). Use the NGC container
+# (nvcr.io/nvidia/tensorrt-llm/release). Box-proven as a CAPABILITY, not a speedup
+# (single-stream decode is NOT faster than Ollama: 54.5 vs 61.2 tok/s).
+# tensorrt-llm  (use the NGC container instead — see ADR-0027)
 #
 # PhysicsNeMo (formerly Modulus) — trained surrogate of the optimizer objective J(levers)
 # for city-scale search (URBANOS_SURROGATE=1 + URBANOS_SURROGATE_CKPT=<path> —

@@ -16,8 +16,9 @@ class Settings(BaseSettings):
     # (it only speaks OpenAI-compatible HTTP), so swapping Ollama for NVIDIA
     # TensorRT-LLM's ``trtllm-serve`` is a *config* change, not a code change — point
     # LLM_BASE_URL at the TRT-LLM server and set this to "tensorrt-llm" so the seam
-    # records which runtime actually answered (ADR-0027). Default Ollama (dev/box);
-    # this is the ONE place a real, on-camera single-GPU decode speedup exists.
+    # records which runtime actually answered (ADR-0027). Default Ollama (dev/box).
+    # Box-proven serving Nemotron via TRT-LLM, but it's a CAPABILITY, not a speedup
+    # (single-stream decode is not faster than Ollama — ADR-0027 §Box verification).
     llm_runtime: str = "ollama"          # ollama | tensorrt-llm | nim | vllm
     # Two tiers: a small-active model for snappy interactive calls, and a larger
     # MoE for heavier batch reasoning (both decode acceptably on the GB10's
