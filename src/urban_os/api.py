@@ -37,12 +37,13 @@ from urban_os.adapters.toronto import NODE_GROUPS
 from urban_os.kernel import Simulation
 from urban_os.narrate import build_insight
 from urban_os.optimize import cost_breakdown, optimize
-from urban_os.scenarios import default_lens_stack
+from urban_os.scenarios import default_lens_stack, extra_display_lenses as _extra_display_lenses
 from urban_os.serialize import native as _native, peak_dict as _peak_dict, r as _r
 from urban_os.services import (
     BENEFIT_DEFINITIONS,
     cross_domain_block as _cross_domain_block,
     cross_domain_components as _cross_domain_components,
+    extra_lens_report as _extra_lens_report,
     four_lens_J as _four_lens_J,
     four_lens_stack as _four_lens_stack,
 )
@@ -339,16 +340,20 @@ def lenses_endpoint(
     sc = _scenario()
     try:
         cur_stack = _four_lens_stack(sc)
+        # Supplementary display lenses ride along in the SAME two sims so they cost
+        # nothing extra; they are excluded from cur_J/base_J (those sum cur_stack /
+        # base_stack only), so the headline numbers are unchanged (ADR: additive).
+        extra = _extra_display_lenses()
         current = Simulation(
             sc.substrate,
-            cur_stack,
+            cur_stack + extra,
             params={"release_minutes": release, "shelter_fraction": shelter},
             dt=sc.dt,
         ).run(sc.horizon)
         base_stack = _four_lens_stack(sc)
         baseline = Simulation(
             sc.substrate,
-            base_stack,
+            base_stack + extra,
             params={"release_minutes": 0.0, "shelter_fraction": 0.0},
             dt=sc.dt,
         ).run(sc.horizon)
@@ -391,6 +396,10 @@ def lenses_endpoint(
             # Canonical additive headline — shared with /optimize, labelled as additive.
             "cross_domain_benefit": _r(comp["total"], 2),
             "cross_domain_components": {k: _r(v, 2) for k, v in comp.items() if k != "total"},
+            # Supplementary intelligence lenses (additive, display-only): each lens's
+            # baseline/optimized/saved dollars + one natural-units metric, at these
+            # exact levers. NOT part of combined_cost / cross_domain_benefit.
+            "extra_lenses": _extra_lens_report(extra, baseline, current),
             "benefit_definitions": BENEFIT_DEFINITIONS,
         }
     )

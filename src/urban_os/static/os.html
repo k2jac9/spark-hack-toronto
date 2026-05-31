@@ -77,6 +77,10 @@
     .bar.transit > span { background: var(--risk-high); }
     .bar.safety > span { background: var(--accent); }
     .bar.business > span { background: var(--risk-none); }
+    .bar.ems > span { background: #ff5c7a; }
+    .bar.emissions > span { background: #8a8f98; }
+    .bar.noise > span { background: #c084fc; }
+    .bar.fare > span { background: #34d399; }
     .combined { margin-top: 12px; padding: 14px; border-radius: var(--r-lg);
       background: linear-gradient(135deg, var(--surface-sel), var(--surface-2));
       border: 1px solid var(--accent); text-align: center; }
@@ -630,7 +634,11 @@
             '<p class="optband">↪ These settings apply across all lenses (City · Flow · Economy).</p>'+
           '</div>'+
           '<div class="meters" id="meters">'+meterHTML('transit','Transit crush (Union ×)','—')+
-            meterHTML('safety','Public-safety exposure','—')+meterHTML('business','Local business lost','—')+'</div>'+
+            meterHTML('safety','Public-safety exposure','—')+meterHTML('business','Local business lost','—')+
+            // Supplementary intelligence lenses (additive, display-only) — they ride the
+            // same lever ripple but never touch the calibrated combined headline.
+            meterHTML('ems','EMS access blocked','—')+meterHTML('emissions','Idling emissions','—')+
+            meterHTML('noise','Residential noise','—')+meterHTML('fare','Fares at risk','—')+'</div>'+
           // F-4: the headline used to show three unexplained dollar figures. Now the
           // big number is cross_domain_benefit, LABELLED "cross-domain (additive)" with
           // its ADR-0019 definition on hover; the conservative single-objective J avoided
@@ -831,6 +839,19 @@
       setMeter('transit', l.transit.peak_congestion, BASELINE.transit.peak_congestion);
       setMeter('safety', l.safety.cost, BASELINE.safety.cost);
       setMeter('business', l.business.lost, BASELINE.business.lost);
+      // Supplementary lenses ripple too (guarded — older API builds omit extra_lenses).
+      const ex = l.extra_lenses, exb = BASELINE && BASELINE.extra_lenses;
+      if (ex) {
+        const setX = (kind, name, fmt) => {
+          const el = document.getElementById('m-'+kind);
+          if (el && ex[name]) el.textContent = fmt(ex[name]);
+          if (exb && exb[name] && ex[name]) setMeter(kind, ex[name].optimized_cost, exb[name].optimized_cost);
+        };
+        setX('ems', 'ems_access', e => dK(e.optimized_cost));
+        setX('emissions', 'emissions', e => Math.round(e.metric.optimized).toLocaleString() + ' kg');
+        setX('noise', 'noise_livability', e => dK(e.optimized_cost));
+        setX('fare', 'fare_revenue', e => dK(e.optimized_cost));
+      }
     }, immediate ? 0 : 220);
   }
 
