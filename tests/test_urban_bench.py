@@ -36,8 +36,10 @@ def test_bench_script_exists():
 
 def test_downtown_bench_is_well_formed(bench):
     b = bench._downtown_bench()
-    assert b.n == 9 and b.e == 9
-    # Crowd is primed at the stadium and nowhere else.
+    # The FIFA convergence-crunch substrate: venues + fan zones + transit relays
+    # + real exit lines (counts pinned so a substrate change is a conscious edit).
+    assert b.n == 17 and b.e == 25
+    # Crowd is primed at the primary venue (BMO Field) and nowhere else.
     assert b.load.sum() == pytest.approx(45000.0)
     assert b.load.max() == pytest.approx(45000.0)
     # Index/dtype invariants for the step.

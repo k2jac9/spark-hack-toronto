@@ -10,7 +10,7 @@ from urban_os.optimize import optimize
 
 def _opt():
     sc = downtown_scenario()
-    lenses = [EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end), EconomicLens()]
+    lenses = [EventSurge(events=sc.events), EconomicLens()]
     return optimize(sc.substrate, lenses, sc.horizon, dt=sc.dt), sc
 
 
@@ -19,10 +19,10 @@ def _opt_three_lens():
     reflect BOTH levers."""
     sc = downtown_scenario()
     lenses = [
-        EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end),
+        EventSurge(events=sc.events),
         EconomicLens(),
         WeatherLens(
-            peak_time=sc.event_end, intensity=0.7, width=20.0, crowd_size=sc.crowd_size
+            peak_time=sc.event_end, intensity=0.7, width=20.0, crowd_size=sc.total_crowd
         ),
     ]
     return optimize(sc.substrate, lenses, sc.horizon, dt=sc.dt), sc

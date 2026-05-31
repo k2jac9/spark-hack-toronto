@@ -20,3 +20,4 @@ supersede older ones only when explicitly marked.
 - [ADR-0015](0015-shelter-as-real-lever-and-cost-transparency.md) — Urban-OS: price crush-safety into J so shelter is a real lever, surface the J-decomposition, fix sink-injection (map==engine)
 - [ADR-0016](0016-shelter-interior-optimum-coverage-premium.md) — Convex coverage premium + fine grid → shelter is a genuine *interior* optimum (release 16 + 50% shelter), not a corner
 - [ADR-0017](0017-urbanos-ui-live-breakdown-and-timeline-trim.md) — Urban-OS UI: live J-breakdown that tracks levers, optimizer-card invalidation, trim the dead timeline tail (3rd audit's other findings refuted)
+- [ADR-0018](0018-fifa-convergence-crunch-substrate.md) — FIFA-window convergence crunch: multi-venue EventSurge (4 concurrent let-outs, 140,800 people) into the Union/Exhibition-GO corridor under one coordinated release lever; real exit lines replace abstract sinks
