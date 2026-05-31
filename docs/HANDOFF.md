@@ -1,5 +1,30 @@
 # Handoff — @cyberqubit session → @k2jac9
 
+## 🆕 FIFA convergence-crunch reshape (branch `feat/urbanos-fifa-triple-crunch`)
+The Urban-OS downtown scenario is reshaped from a single abstract stadium let-out
+into the **FIFA World Cup 2026 Fan-Festival "convergence crunch"**: **4 concurrent
+venue let-outs** (BMO Field FIFA 46k + Rogers Centre 45k + Scotiabank Arena 19.8k +
+Fort York fan festival 30k = **140,800 people**) superimposing their egress pulses
+into the **Union / Exhibition-GO corridor**, under **one coordinated release lever**.
+`EventSurge` gained multi-venue injection; abstract sinks are now real exit lines
+(Lakeshore W/E, Line 1). 17 nodes / 25 edges. Union is the convergence bottleneck;
+**Exhibition GO** is the FIFA-specific secondary crush (only rail adjacent to BMO
+Field). Rationale + real anchors + the honest-calibration caveat:
+[ADR-0018](adr/0018-fifa-convergence-crunch-substrate.md).
+
+**New headline numbers (each reproduced by a named command — see PITCH §"The numbers"):**
+- `make urbanos-cli` (2-lens): Union **3.7×** → **−67%** with a **14-min** release, **~$218k**.
+- `--safety --business` (cross-domain): **~$281k**; safety $53.7k→$1.6k, business $10.4k.
+- live `:8001` `/optimize` (3-lens + weather/shelter): Union **4.0×→1.0×** (**−75%**),
+  **16-min release + 80% shelter**, J benefit **~$394k**, **combined ~$458k**.
+
+The framing: the saving is the **operations** side of offsetting the Fan Festival's
+**$6.2M deficit**. (Docs reshaped on this branch; code/UI reshaped by the other
+worker. Pull `main`/the branch onto the box and restart `:8001` so the live demo
+serves these numbers — the old 14-min/$116k figures are superseded.)
+
+---
+
 Everything below is **merged, CI-green, and additive**. Two things need your hand
 (the box is yours). `main` is at the latest as of this note.
 
@@ -15,7 +40,9 @@ systemctl --user restart civic-demo          # :8000 — picks up the Python cha
 # restart your :8001 urban_os process too (it serves the stale optimize numbers)
 ```
 After that, `make urbanos-cli` and `:8001`'s "Find best intersection" show the
-current **14-min release / 62% / ~$60k**, plus the new cross-domain panel.
+current FIFA convergence-crunch numbers (see the top section: 2-lens **14-min /
+−67% / ~$218k**; live `:8001` 3-lens **16-min + 80% shelter / 4.0×→1.0× / ~$458k
+combined**), plus the cross-domain panel.
 
 **2. Heads-up: I touched your `~/.openclaw/openclaw.json`** (additively, backed up —
 see NemoClaw below). Your default Qwen/vLLM setup is **unchanged**.
@@ -60,7 +87,10 @@ Also: I briefly created a *system* `civic-demo.service` that collided with your
 one running and it's solid. No leftover.
 
 ## State of the demo
-Four lenses on one kernel (EventSurge · Economic · **Safety = civic risk** ·
-**BusinessFlow**), one lever optimizing **~$116k** across transit + public safety +
-local business, grounded narration, agent-drivable via NemoClaw, **100% offline on
-the GX10**. Pitch in [`docs/PITCH.md`](PITCH.md).
+Four lenses on one kernel (EventSurge **(multi-venue)** · Economic · **Safety =
+civic risk** · **BusinessFlow**), one coordinated lever optimizing across transit +
+public safety + local business on the **FIFA convergence crunch** (4 concurrent
+let-outs, 140,800 people) — **~$458k** combined on the live `:8001` 3-lens surface
+(see the top section for the per-surface breakdown), grounded narration,
+agent-drivable via NemoClaw, **100% offline on the GX10**. Pitch in
+[`docs/PITCH.md`](PITCH.md).

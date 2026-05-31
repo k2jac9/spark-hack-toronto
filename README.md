@@ -30,9 +30,18 @@ static risk app becomes the **Safety/Public-Services lens** running on this kern
 proving the adapter×lens architecture.
 
 ### The killer insight (live, from the model)
-> *"Union Station reaches **2.5× safe capacity 14 minutes after full-time**; a
-> **14-minute staggered release** cuts the peak by **62%** — a net intervention
-> benefit of **~$60k** (cost J $94k → $34k)."*
+On a peak **FIFA World Cup 2026** day, four downtown venues let out into the same
+corridor at once (BMO Field FIFA + Rogers Centre + Scotiabank Arena + the Fort York
+Fan Festival — **140,800 people**; see [ADR-0018](docs/adr/0018-fifa-convergence-crunch-substrate.md)):
+> *"Union Station reaches **3.7× safe capacity 19 minutes after full-time**; a
+> **14-minute staggered release** cuts the peak by **67%** — a net intervention
+> benefit of **~$218k** (cost J $323k → $105k)."* — `make urbanos-cli`
+
+Add the cross-domain lenses (`--safety --business`) → **~$281k** combined; the live
+`:8001` `/optimize` (3-lens, with the weather/shelter lever) lands on a **16-min
+release + 80% shelter**, Union **4.0× → 1.0×**, **~$458k** combined benefit. One
+coordinated lever is the operations side of offsetting the Fan Festival's **$6.2M
+deficit**.
 
 Specific station, timing, lever, dollars — emergent from the dynamics, and **grounded**:
 the figures are computed deterministically and the local model only phrases them, behind
