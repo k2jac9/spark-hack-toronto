@@ -426,6 +426,17 @@
         const shelFrac = d.best_params.shelter_fraction != null ? d.best_params.shelter_fraction : 0;
         const shelPct = Math.round(shelFrac * 100);
         const cb = d.cost_breakdown || {};
+        // The same recommended release, scored across the other two lenses
+        // (civic-Safety + Business-Flow) — computed server-side without changing
+        // the optimizer above. The "one lever, every lens" story.
+        const cd = d.cross_domain;
+        const cdHtml = cd ?
+          '<div class="lbl">Cross-domain — the same release, every lens</div>' +
+          '<table class="breakdown" aria-label="Cross-domain impact of the recommended release"><tbody>' +
+          '<tr><td>Public safety (civic risk × crush)</td><td>' +
+            dollarsK(cd.safety.baseline) + ' → ' + dollarsK(cd.safety.best) + '</td></tr>' +
+          '<tr><td>Local business recovered</td><td>+' + dollarsK(cd.business.recovered) + '</td></tr>' +
+          '</tbody></table>' : '';
         optOut.innerHTML =
           '<div class="superseded" id="opt-superseded" style="display:none">⚠ superseded — re-run to refresh (levers moved off the recommendation)</div>' +
           '<div class="insight"><span class="tag ' + (d.grounded ? 'grounded">✓ grounded' : 'fallback">⚠ template') +
@@ -440,7 +451,7 @@
           '<div class="save">Net benefit ' + dollarsK(d.savings) + '</div>' +
           '<div class="lbl">Why — objective J breakdown (best run)</div>' +
           '<table class="breakdown" aria-label="Objective J cost breakdown for the recommended run"><tbody>' +
-          breakdownRowsHTML(cb) + '</tbody></table>';
+          breakdownRowsHTML(cb) + '</tbody></table>' + cdHtml;
         // Remember the pick so a later manual lever move can invalidate this card.
         BEST_PARAMS = { release_minutes: Number(relMin), shelter_fraction: Number(shelFrac) };
         // Reflect BOTH recommended levers on the map + sliders.
