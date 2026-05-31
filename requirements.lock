@@ -56,13 +56,19 @@ mcp==1.27.1
 networkx==3.6.1
     # via -r requirements.txt
 numpy==2.4.6
-    # via pandas
+    # via
+    #   -r requirements.txt
+    #   pandas
 packaging==26.2
     # via pytest
 pandas==3.0.3
     # via -r requirements.txt
 pluggy==1.6.0
     # via pytest
+polars==1.41.2
+    # via -r requirements.txt
+polars-runtime-32==1.41.2
+    # via polars
 pycparser==3.0
     # via cffi
 pydantic==2.13.4

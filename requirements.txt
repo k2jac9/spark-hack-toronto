@@ -5,6 +5,10 @@ pydantic>=2.6
 pydantic-settings>=2.2
 networkx>=3.2
 numpy>=1.26
+# Ingest dataframe engine (CPU everywhere). The RAPIDS cuDF GPU engine
+# (collect(engine="gpu")) accelerates it on the GB10 — see requirements-gpu.txt.
+polars>=1.0
+# pandas is retained as the deterministic ingest fallback when Polars is absent.
 pandas>=2.2
 python-dotenv>=1.0
 mcp>=1.2

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -163,6 +164,66 @@ def _read_rows(path: Path) -> tuple[list[str], list[dict[str, Any]]]:
         rows = [r for r in rows[:_ROW_LIMIT] if isinstance(r, dict)]
         columns = list(rows[0].keys()) if rows else []
         return columns, rows
+    return _read_csv_rows(path)
+
+
+# Which engine read the last CSV: "cudf-polars" (RAPIDS GPU), "polars" (CPU), or
+# "pandas" (fallback). Reflects what ACTUALLY ran — for the `make gpu-check` proof.
+DF_BACKEND: str = "pandas"
+
+
+def _gpu_df_enabled() -> bool:
+    """The cuDF GPU dataframe engine is opt-in: ``URBANOS_GPU_DF=1`` on a box with
+    Polars' GPU engine (``cudf-polars``) installed. Off by default so the demo venv /
+    CI are untouched; the GPU engine helps at ingest scale (full city datasets), not
+    the small committed demo slice."""
+    return os.environ.get("URBANOS_GPU_DF", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _read_csv_rows(path: Path) -> tuple[list[str], list[dict[str, Any]]]:
+    """Read a CSV as all-string rows (nulls → "").
+
+    Prefers **Polars** — with the **RAPIDS cuDF GPU engine** when enabled+installed —
+    and falls back to **pandas** when Polars is absent (so the live demo venv keeps
+    working until Polars is installed). All three paths return the IDENTICAL
+    ``(columns, rows)``; this is a drop-in ingest accelerator, never a behaviour
+    change (golden two-index numbers are unaffected — see tests)."""
+    global DF_BACKEND
+    # Escape hatch to force the pandas path (parity testing / emergencies).
+    if os.environ.get("URBANOS_DF_BACKEND", "").strip().lower() == "pandas":
+        DF_BACKEND = "pandas"
+        return _read_csv_rows_pandas(path)
+    try:
+        import polars as pl
+    except Exception:
+        DF_BACKEND = "pandas"
+        return _read_csv_rows_pandas(path)
+    try:
+        # Lazy scan so the cuDF GPU engine (when enabled) can accelerate the query;
+        # infer_schema_length=0 ⇒ every column stays a string, matching pandas dtype=str.
+        lf = pl.scan_csv(
+            path, infer_schema_length=0, ignore_errors=True, truncate_ragged_lines=True
+        ).head(_ROW_LIMIT)
+        if _gpu_df_enabled():
+            try:
+                df = lf.collect(engine="gpu")
+                DF_BACKEND = "cudf-polars"
+            except Exception as exc:  # GPU engine/cudf-polars missing → Polars CPU
+                _log.warning("cuDF GPU engine unavailable, using Polars CPU: %s", exc)
+                df = lf.collect()
+                DF_BACKEND = "polars"
+        else:
+            df = lf.collect()
+            DF_BACKEND = "polars"
+        df = df.fill_null("")
+        return df.columns, df.to_dicts()
+    except Exception as exc:  # any Polars read problem → pandas, never fail the load
+        _log.warning("Polars read failed for %s, using pandas: %s", path, exc)
+        DF_BACKEND = "pandas"
+        return _read_csv_rows_pandas(path)
+
+
+def _read_csv_rows_pandas(path: Path) -> tuple[list[str], list[dict[str, Any]]]:
     df = pd.read_csv(path, dtype=str, nrows=_ROW_LIMIT).fillna("")
     return list(df.columns), df.to_dict("records")
 
