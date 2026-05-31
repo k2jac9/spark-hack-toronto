@@ -268,8 +268,15 @@ def test_optimize_shape_is_pinned():
     assert set(body.keys()) == {
         "insight", "grounded", "figures", "optimization",
         "baseline_peak", "best_peak", "best_params", "savings",
-        "cost_breakdown", "baseline_cost_breakdown",
+        "cost_breakdown", "baseline_cost_breakdown", "cross_domain",
     }
+    # Cross-domain extras: the same release scored across the Safety + Business
+    # lenses (computed separately). Tolerated as None, but well-formed if present.
+    cd = body["cross_domain"]
+    assert cd is None or (
+        cd["safety"]["best"] <= cd["safety"]["baseline"]
+        and cd["business"]["recovered"] >= 0
+    )
     assert isinstance(body["insight"], str) and body["insight"].strip()
     assert isinstance(body["grounded"], bool)
     assert isinstance(body["savings"], (int, float)) and body["savings"] > 0

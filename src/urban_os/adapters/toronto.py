@@ -103,6 +103,22 @@ def _synthetic_safety_by_node(substrate) -> dict[str, float]:
     return {nid: float(vals[i]) for i, nid in enumerate(substrate.ids)}
 
 
+_CIVIC_ADDRS_CACHE: list | None = None
+
+
+def _civic_addresses() -> list:
+    """Civic addresses (coords + safety risk), loaded ONCE. civic_analyst's
+    ``load()`` accumulates into a module-global graph, so calling it per request
+    drifts the aggregated risk — cache the result so the overlay is stable."""
+    global _CIVIC_ADDRS_CACHE
+    if _CIVIC_ADDRS_CACHE is None:
+        from civic_analyst import mcp_server as civ
+
+        civ.load()
+        _CIVIC_ADDRS_CACHE = [a for a in civ.top_risk(limit=2000) if a.get("lat") is not None]
+    return _CIVIC_ADDRS_CACHE
+
+
 def civic_safety_by_node(substrate, *, radius_deg: float = 0.0045) -> dict[str, float]:
     """Map each substrate node → the civic-safety risk of its surrounding addresses
     (the civic_analyst graph), proximity-weighted. This is the **real fusion** that
@@ -114,10 +130,7 @@ def civic_safety_by_node(substrate, *, radius_deg: float = 0.0045) -> dict[str, 
     import numpy as np
 
     try:
-        from civic_analyst import mcp_server as civ
-
-        civ.load()
-        addrs = [a for a in civ.top_risk(limit=2000) if a.get("lat") is not None]
+        addrs = _civic_addresses()  # cached: civ.load() runs once (it accumulates)
         if not addrs:
             raise RuntimeError("no civic addresses loaded")
         out: dict[str, float] = {}

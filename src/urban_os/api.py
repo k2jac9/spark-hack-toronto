@@ -31,9 +31,15 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from urban_os.adapters import downtown_scenario
+from urban_os.adapters import civic_safety_by_node, downtown_scenario
 from urban_os.kernel import Simulation
-from urban_os.lenses import EconomicLens, EventSurge, WeatherLens
+from urban_os.lenses import (
+    BusinessFlow,
+    EconomicLens,
+    EventSurge,
+    SafetyLens,
+    WeatherLens,
+)
 from urban_os.narrate import build_insight
 from urban_os.optimize import cost_breakdown, optimize
 
@@ -285,6 +291,30 @@ def _peak_dict(result) -> dict:
     }
 
 
+def _cross_domain(sc, best_params: dict) -> dict:
+    """Impact of the *same* optimized release on the other two lenses — computed
+    separately so the optimizer + J breakdown above are untouched (no headline
+    change). Honest framing: the release the optimizer picked also does this for
+    public safety + local business. Two cheap extra sims (baseline vs best); never
+    re-runs the lever search.
+    """
+    stack = [
+        EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end),
+        EconomicLens(),
+        SafetyLens(civic_safety_by_node(sc.substrate)),  # civic risk → node field
+        BusinessFlow(sc.venue_id),
+    ]
+    safety = next(ln for ln in stack if ln.name == "safety")
+    base = Simulation(sc.substrate, stack, params={"release_minutes": 0.0}, dt=sc.dt).run(sc.horizon)
+    best = Simulation(sc.substrate, stack, params=dict(best_params), dt=sc.dt).run(sc.horizon)
+    base_lost = float(sum(base.series("business_lost")))
+    best_lost = float(sum(best.series("business_lost")))
+    return {
+        "safety": {"baseline": _r(safety.cost(base), 0), "best": _r(safety.cost(best), 0)},
+        "business": {"baseline_lost": _r(base_lost, 0), "recovered": _r(base_lost - best_lost, 0)},
+    }
+
+
 @app.get("/optimize")
 def optimize_endpoint() -> dict:
     """Run the lever optimizer + the cited narrator and return everything the UI
@@ -312,4 +342,15 @@ def optimize_endpoint() -> dict:
         # safety/total), not just the headline saving.
         "cost_breakdown": best_breakdown,
         "baseline_cost_breakdown": baseline_breakdown,
+        # The same release, scored across the other two lenses (computed separately
+        # so the optimizer + breakdown above are unchanged). None if it can't run.
+        "cross_domain": _cross_domain_safe(sc, opt.best_params),
     }
+
+
+def _cross_domain_safe(sc, best_params: dict):
+    """Never let the cross-domain extras break the core /optimize response."""
+    try:
+        return _cross_domain(sc, best_params)
+    except Exception:
+        return None
