@@ -2,9 +2,18 @@
 
 ``J = Σ wₚ·Jₚ`` over the lenses' ``cost`` terms. P0 does an exhaustive grid
 search over the (small, discrete) lever space; that is correct and trivially
-deterministic, and it is the seam where **cuOpt** drops in on the GX10 for the
-larger joint-lever problem (the search is isolated behind ``optimize`` so the
-solver can be swapped without touching lenses or the kernel).
+deterministic. ``OptResult.solver`` records which solver produced the answer
+(currently always ``"grid"``).
+
+**On cuOpt (honest scoping):** cuOpt solves structured LP / MILP / routing
+problems, NOT a black-box *simulation-in-the-loop* search — here ``J`` is produced
+by running the kernel for each lever combo, which cuOpt cannot evaluate. So cuOpt
+is *not* a drop-in for this optimizer; using it would require reformulating the
+intervention as an LP/MILP (or a min-cost-flow on the capacitated substrate, which
+cugraph/cuOpt's network solver could take). That reformulation is a real next step,
+deliberately not faked here. The two RAPIDS accelerators that DO genuinely fit are
+wired: ``nx-cugraph`` for the substrate shortest-paths bake (``kernel/state.py``)
+and ``cuDF`` (via Polars' GPU engine) for the civic ingest (``ingest/loader.py``).
 
 "Do nothing" is the first value of every lever (convention: index 0), so the
 baseline is always part of the search and the reported saving is honest.
@@ -93,6 +102,10 @@ class OptResult:
     # directly-constructed OptResults; ``optimize()`` always fills them.
     baseline_breakdown: dict | None = None
     best_breakdown: dict | None = None
+    # Which solver produced this result. Always "grid" today (the honest,
+    # deterministic exhaustive search). A future cuOpt LP/MILP reformulation would
+    # set "cuopt" — see the module docstring for why cuOpt is not a drop-in.
+    solver: str = "grid"
 
     @property
     def savings(self) -> float:
@@ -172,4 +185,5 @@ def optimize(
         trials=trials,
         baseline_breakdown=cost_breakdown(baseline_result, lenses),
         best_breakdown=cost_breakdown(best_result, lenses),
+        solver="grid",
     )

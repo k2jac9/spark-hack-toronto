@@ -1,5 +1,6 @@
 .PHONY: install install-hooks data serve cli test demo demo-public funnel-off funnel-off-all \
-        demo-cli demo-data urbanos urbanos-cli urbanos-accel urbanos-bench screenshot
+        demo-cli demo-data urbanos urbanos-cli urbanos-accel urbanos-bench screenshot \
+        gpu-install gpu-check
 
 # demo  -> real downtown-Toronto slice (demo_data/), pins land on the offline map.
 # demo-cli/tests -> synthetic, deterministic fixtures/.
@@ -12,6 +13,16 @@ PYTHON ?= $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo pytho
 
 install:
 	$(PYTHON) -m pip install -r requirements.txt
+
+# Install the optional RAPIDS GPU accelerators — ON THE BOX ONLY (aarch64 + CUDA).
+# The app falls back to CPU without these, so dev/CI never need them.
+gpu-install:
+	$(PYTHON) -m pip install --extra-index-url=https://pypi.nvidia.com -r requirements-gpu.txt
+
+# Prove which backend each GPU seam actually used (nx-cugraph / cuDF-Polars). On the
+# box with gpu-install done, expect "cugraph" / "cudf-polars"; elsewhere CPU fallback.
+gpu-check:
+	URBANOS_GPU_GRAPH=1 URBANOS_GPU_DF=1 PYTHONPATH=src $(PYTHON) scripts/gpu_check.py
 
 # Run once per clone (you AND your teammate). Enables the shared pre-push hook
 # that blocks pushing a red test suite. Bypass an emergency push with --no-verify.

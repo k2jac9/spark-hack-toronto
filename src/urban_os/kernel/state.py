@@ -11,10 +11,56 @@ is from an exit — is precomputed here so the integrator is pure array math.
 """
 from __future__ import annotations
 
+import logging
+import os
 from dataclasses import dataclass, field
 
 import networkx as nx
 import numpy as np
+
+_log = logging.getLogger(__name__)
+
+# Which backend computed the last substrate shortest-paths bake — "cugraph" (GPU,
+# RAPIDS nx-cugraph) or "networkx" (CPU). Exposed for the `make gpu-check` proof and
+# the wiring test; the value reflects what ACTUALLY ran, not what was requested.
+GRAPH_BACKEND: str = "networkx"
+
+
+def _gpu_graph_enabled() -> bool:
+    """GPU graph backend is opt-in: set ``URBANOS_GPU_GRAPH=1`` (or the standard
+    ``NX_CUGRAPH_AUTOCONFIG=True``) on a box where ``nx-cugraph`` is installed.
+
+    Off by default so the demo venv / CI (no CUDA libs) and the tiny demo graph are
+    untouched — exactly the Rust-accelerator opt-in pattern (ADR-0004/0009). The
+    GPU backend pays off at city scale (real GTFS, thousands of nodes), not on the
+    17/459-node demo substrate, where CPU is used and is faster."""
+    return bool(
+        os.environ.get("URBANOS_GPU_GRAPH", "").strip().lower() in {"1", "true", "yes"}
+        or os.environ.get("NX_CUGRAPH_AUTOCONFIG", "").strip().lower() in {"1", "true"}
+    )
+
+
+def _multi_source_dijkstra_lengths(rev: nx.DiGraph, sources: set) -> dict:
+    """Multi-source shortest-path lengths over edge ``length`` to the sink set.
+
+    Uses the RAPIDS ``nx-cugraph`` GPU backend when enabled AND installed AND it
+    implements this algorithm; otherwise (or on any error) falls back to networkx on
+    the CPU. Records the backend that actually ran in ``GRAPH_BACKEND``. The result
+    is identical either way — this is a drop-in accelerator seam, never a behaviour
+    change (a wrong/empty GPU result would be a bug; we fall back, we don't trust a
+    partial answer)."""
+    global GRAPH_BACKEND
+    if _gpu_graph_enabled():
+        try:
+            lengths = nx.multi_source_dijkstra_path_length(
+                rev, sources, weight="length", backend="cugraph"
+            )
+            GRAPH_BACKEND = "cugraph"
+            return lengths
+        except Exception as exc:  # backend missing / algo unsupported / runtime error
+            _log.warning("nx-cugraph backend unavailable, using CPU networkx: %s", exc)
+    GRAPH_BACKEND = "networkx"
+    return nx.multi_source_dijkstra_path_length(rev, sources, weight="length")
 
 
 @dataclass
@@ -79,9 +125,9 @@ class Substrate:
         rev = g.reverse(copy=False)
         dist = np.full(n, np.inf)
         if sink_set:
-            lengths = nx.multi_source_dijkstra_path_length(
-                rev, sink_set, weight="length"
-            )
+            # RAPIDS nx-cugraph GPU backend when enabled+installed, else CPU networkx
+            # (identical result; see ``_multi_source_dijkstra_lengths``).
+            lengths = _multi_source_dijkstra_lengths(rev, sink_set)
             for nid, d in lengths.items():
                 dist[index[nid]] = float(d)
 

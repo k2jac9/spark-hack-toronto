@@ -69,7 +69,7 @@ City of Toronto Open Data (CKAN)  ──►  City adapter (adapters/toronto.py)
    └──────────────────────────────────────────┘
         │  lenses: EventSurge (egress wave) + Economic (risk = ρ^2.5, $ delay)
         ▼
-   Optimizer (optimize.py)  ──►  J-minimizing intervention  ──►  cuOpt seam on the box
+   Optimizer (optimize.py)  ──►  J-minimizing intervention  (deterministic grid search)
         │
         ▼
    Narrator (narrate.py, local model + hallucination guard)  ──►  the cited one-liner
@@ -79,13 +79,26 @@ City of Toronto Open Data (CKAN)  ──►  City adapter (adapters/toronto.py)
 ```
 
 ### NVIDIA stack (on the GX10)
-- **cuDF / cuML (RAPIDS)** — `cudf.pandas` drop-in accelerates the CKAN ingest with zero
-  code change; cuML clusters 311 demand.
-- **`nx-cugraph`** — GPU-accelerates the networkx substrate via one env var (no rewrite).
+Each accelerator is **wired with a CPU fallback** (the demo never blocks if a GPU lib
+is absent) and **opt-in** on the box. Install with `make gpu-install`; prove which
+backend actually ran with **`make gpu-check`** (prints `cugraph` / `cudf-polars` on the
+box, CPU fallback elsewhere). Honest scale note: these pay off on full-city data, not
+the tiny demo substrate — same as the Rust accelerator (ADR-0009).
+
 - **NeMo / Nemotron (local)** — the insight narrator and agentic lenses, fully on-device.
-- **cuOpt** — drops into the optimizer's search seam for the larger joint-lever problem.
+  *Wired and live* (verified grounded on the box).
+- **`nx-cugraph` (RAPIDS)** — GPU backend for the substrate shortest-paths bake
+  (`kernel/state.py`), enabled by `URBANOS_GPU_GRAPH=1`. Falls back to networkx CPU.
+- **cuDF (RAPIDS) via Polars** — the civic ingest uses **Polars**, whose
+  `collect(engine="gpu")` runs on **cuDF**; enabled by `URBANOS_GPU_DF=1`. Falls back to
+  Polars-CPU, then pandas. Drop-in: identical rows, golden numbers unchanged.
 - **Rust core + 128 GB unified memory** — the full graph, live sim state, and the model
   coexist; the kernel steps at **N× real-time** (measure with `make urbanos-accel`).
+- **cuOpt** — *next step, not yet wired.* cuOpt solves LP/MILP/routing, not a black-box
+  *simulation-in-the-loop* search, so it is **not** a drop-in for our lever optimizer;
+  wiring it needs an LP/MILP (or substrate min-cost-flow) reformulation. See the honest
+  scoping in `urban_os/optimize.py`.
+- **cuML** — *not used.* (No clustering step ships today; removed from the claim.)
 
 Design decisions are recorded in [docs/adr/](docs/adr/).
 

@@ -1,0 +1,24 @@
+# Optional RAPIDS GPU accelerators for the NVIDIA GB10 box (aarch64, CUDA 12 wheels;
+# driver 580 runs cu12 fine). NOT installed by CI or the dev/demo venv — the code
+# falls back to CPU (networkx / Polars-CPU / pandas) when these are absent, so the
+# live demo is never blocked. Install ON THE BOX to activate the GPU paths:
+#
+#   pip install --extra-index-url=https://pypi.nvidia.com -r requirements-gpu.txt
+#
+# Then enable per path (off by default):
+#   URBANOS_GPU_GRAPH=1   → nx-cugraph backend for the substrate shortest-paths bake
+#   URBANOS_GPU_DF=1      → cuDF GPU engine behind Polars' collect(engine="gpu")
+# Verify with:  make gpu-check
+--extra-index-url https://pypi.nvidia.com
+
+# GPU backend for networkx (substrate dijkstra bake — src/urban_os/kernel/state.py).
+nx-cugraph-cu12
+
+# RAPIDS cuDF engine behind Polars' GPU engine (civic ingest — src/civic_analyst/ingest/loader.py).
+cudf-polars-cu12
+
+# NOTE: cuOpt is deliberately NOT listed. It solves structured LP/MILP/routing, not a
+# black-box simulation-in-the-loop search like our lever optimizer (J is produced by
+# running the kernel). Wiring cuOpt requires reformulating the intervention as an
+# LP/MILP (or a min-cost-flow on the substrate) — a real next step, not a drop-in.
+# See src/urban_os/optimize.py for the honest scoping.
