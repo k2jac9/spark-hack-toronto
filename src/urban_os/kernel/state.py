@@ -120,6 +120,11 @@ class State:
         self.fields["congestion"] = np.zeros(substrate.n)
         self.fields["risk"] = np.zeros(substrate.n)
         self.fields["arrived"] = np.zeros(substrate.n)  # cumulative absorbed at sinks
+        # Per-step transport capacity multiplier (E,), reset to 1.0 each step by the
+        # loop. Lenses that tax link throughput (e.g. WeatherLens rain) MULTIPLY into
+        # this instead of mutating the shared, baked ``substrate.edge_cap`` — so the
+        # substrate stays immutable across steps/runs/optimizer trials (ADR-0021).
+        self.edge_cap_mult = np.ones(substrate.n_edges)
 
     def field(self, name: str) -> np.ndarray:
         """Get a field, creating a zeroed one on first use (lenses add fields)."""

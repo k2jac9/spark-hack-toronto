@@ -119,7 +119,8 @@ def test_rain_slows_drainage() -> None:
 
 
 def test_cap_penalty_magnitude_is_exact() -> None:
-    """source() scales caps to exactly dry·(1 − _MAX_CAP_PENALTY·wetness)."""
+    """source() scales the per-step multiplier to exactly (1 − _MAX_CAP_PENALTY·wetness),
+    leaving the baked substrate.edge_cap untouched (ADR-0021)."""
     from urban_os.kernel.state import State
 
     sub = _line_graph()
@@ -128,18 +129,21 @@ def test_cap_penalty_magnitude_is_exact() -> None:
     rain.configure(sub)
     st = State(sub, {"dt": 1.0})
     rain.source(st, 0.0)  # t==peak ⇒ wetness 1.0
-    assert np.allclose(sub.edge_cap, dry * (1.0 - _MAX_CAP_PENALTY))
+    # The rain tax lands on the per-step multiplier, not the substrate.
+    assert np.allclose(st.edge_cap_mult, 1.0 - _MAX_CAP_PENALTY)
+    assert np.allclose(sub.edge_cap, dry)  # substrate never mutated
     rain.couple(st, 0.0)
     assert np.allclose(sub.edge_cap, dry)
 
 
-def test_edge_cap_is_restored_after_each_step() -> None:
-    """The transient capacity tax must not permanently corrupt the substrate."""
+def test_substrate_edge_cap_never_mutated() -> None:
+    """The capacity tax must never touch the shared substrate (ADR-0021): the baked
+    edge_cap is byte-identical before and after a full rainy run."""
     sub = _line_graph()
     dry_caps = sub.edge_cap.copy()
     rain = _rain_now()
     Simulation(sub, [_Seed(200.0), EconomicLens(), rain], dt=1.0).run(20)
-    # After the run, the substrate's baked link capacities are pristine.
+    # The substrate's baked link capacities are pristine (were never written).
     assert np.allclose(sub.edge_cap, dry_caps)
 
 
@@ -315,7 +319,8 @@ def test_lens_subclass_and_default_hooks() -> None:
 
 
 def test_configure_missing_is_handled_gracefully() -> None:
-    """If source() runs before configure() (defensive path), it self-heals."""
+    """source() needs no configure() now — it taxes the per-step multiplier and
+    never reads/writes the substrate's edge_cap (ADR-0021)."""
     sub = _line_graph()
     rain = WeatherLens(peak_time=0.0, intensity=1.0, width=10.0)
     state_caps = sub.edge_cap.copy()
@@ -324,10 +329,10 @@ def test_configure_missing_is_handled_gracefully() -> None:
 
     st = State(sub, {"dt": 1.0})
     rain.source(st, 0.0)
-    # During source the caps are penalised...
-    assert np.all(sub.edge_cap <= state_caps + 1e-9)
+    # The penalty is on the multiplier; the substrate is untouched throughout.
+    assert np.all(st.edge_cap_mult <= 1.0 + 1e-9)
+    assert np.allclose(sub.edge_cap, state_caps)
     rain.couple(st, 0.0)
-    # ...and restored after couple.
     assert np.allclose(sub.edge_cap, state_caps)
 
 

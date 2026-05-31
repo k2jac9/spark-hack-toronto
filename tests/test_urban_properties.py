@@ -65,6 +65,20 @@ def test_per_step_conservation_exact_noise_zero() -> None:
         assert total == pytest.approx(80.0, abs=1e-9)
 
 
+@pytest.mark.parametrize("seed", [0, 1, 42])
+@pytest.mark.parametrize("noise", [0.5, 2.0])
+def test_per_step_conservation_exact_with_noise(seed: int, noise: float) -> None:
+    """ADR-0021: conservation now holds UNDER noise too, not just on the noise==0
+    path. The jitter is zero-sum and rescaled after the non-negativity clip, so
+    load.sum()+arrived.sum() stays equal to the injected total at every frame."""
+    sub = _line_graph()
+    sim = Simulation(sub, [_Seed("venue", 80.0)], dt=1.0, noise=noise, seed=seed)
+    res = sim.run(40)
+    for f in res.frames:
+        total = float(f["load"].sum() + f["arrived"].sum())
+        assert total == pytest.approx(80.0, abs=1e-6)
+
+
 @pytest.mark.parametrize("dt", [0.5, 1.0, 2.0])
 def test_per_step_conservation_exact_various_dt(dt: float) -> None:
     sub = _line_graph()

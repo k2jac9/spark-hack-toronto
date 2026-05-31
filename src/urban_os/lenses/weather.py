@@ -4,11 +4,12 @@ A rainstorm during egress does two physical things to a transit network, and
 this lens models both through the four-operator contract:
 
 - **Slower drainage.** Wet platforms, umbrellas, and cautious boarding cut the
-  effective per-minute throughput of every link. Because the kernel's
-  ``transport`` reads ``substrate.edge_cap`` *each step* (between ``source`` and
-  ``couple``), the lens scales that baked array down in ``source`` and restores
-  it in ``couple`` — a transient, fully reversible "rain tax" on link capacity
-  that never permanently corrupts the substrate other lenses share.
+  effective per-minute throughput of every link. The lens scales the per-step
+  ``state.edge_cap_mult`` (reset to 1.0 each step by the loop) down in ``source``;
+  ``transport`` reads ``substrate.edge_cap * edge_cap_mult``, so the "rain tax" is
+  applied WITHOUT mutating the shared baked ``edge_cap`` — the substrate stays
+  immutable across steps/runs/optimizer trials, removing the old snapshot/restore
+  dance and its cross-run state-leak hazard (ADR-0021).
 - **Higher crush risk at the same density.** Rain makes a given platform density
   more dangerous (slips, reduced visibility, people bunching under shelter), so
   the lens *multiplies* the standing ``risk`` field by a wetness factor after the
@@ -37,7 +38,7 @@ import numpy as np
 
 from ..kernel.loop import SimResult
 from ..kernel.operators import Lens, Lever
-from ..kernel.state import State, Substrate
+from ..kernel.state import State
 
 # At full rain (intensity 1.0, no shelter), effective link throughput drops to
 # this fraction of dry capacity (≈25% slower boarding/walking). Plausible upper
@@ -98,15 +99,11 @@ class WeatherLens(Lens):
         self.crowd_size = float(crowd_size)
         self.max_shelter = float(max_shelter)
         self.weight = float(weight)
-        self._saved_edge_cap: np.ndarray | None = None
-        self._dry_edge_cap: np.ndarray | None = None
 
-    # ------------------------------------------------------------------ config
-    def configure(self, substrate: Substrate) -> None:
-        # Keep a pristine copy of the dry link capacities. We always derive the
-        # rained-on capacity from *this* baseline so repeated runs / repeated
-        # steps never compound the penalty.
-        self._dry_edge_cap = np.array(substrate.edge_cap, dtype=float, copy=True)
+    # configure() is intentionally not overridden: the rain tax is applied to the
+    # per-step ``state.edge_cap_mult`` (see source()), so this lens holds NO mutable
+    # cross-run state — the optimizer can safely reuse one instance across trials
+    # (ADR-0021). The substrate's baked ``edge_cap`` is never touched.
 
     # ------------------------------------------------------------------ helpers
     def _rain_at(self, t: float) -> float:
@@ -125,36 +122,26 @@ class WeatherLens(Lens):
 
     # ------------------------------------------------------------------ source
     def source(self, state: State, t: float) -> None:
-        """Scale link capacity DOWN before transport runs this step.
+        """Apply the rain capacity tax to THIS step's transport multiplier.
 
-        ``transport`` reads ``substrate.edge_cap`` next, so this is how rain
-        slows drainage. We snapshot whatever is currently in ``edge_cap`` and
-        write a penalised copy; ``couple`` restores the snapshot afterwards so
-        the substrate other lenses see is untouched between steps.
+        ``transport`` reads ``substrate.edge_cap × state.edge_cap_mult`` next, so
+        multiplying the (loop-reset) multiplier here is how rain slows drainage —
+        for this step only, and WITHOUT ever mutating the shared, baked ``edge_cap``.
+        There is nothing to restore later (ADR-0021).
         """
-        sub = state.substrate
-        # Defensive: if configure() never ran, fall back to the live array.
-        dry = self._dry_edge_cap
-        if dry is None or dry.shape != sub.edge_cap.shape:
-            dry = np.array(sub.edge_cap, dtype=float, copy=True)
-            self._dry_edge_cap = dry
-        self._saved_edge_cap = np.array(sub.edge_cap, dtype=float, copy=True)
         wet = self._wetness(t, self._shelter(state))
         factor = 1.0 - _MAX_CAP_PENALTY * wet      # in [1-_MAX_CAP_PENALTY, 1]
-        sub.edge_cap[:] = dry * factor
+        state.edge_cap_mult *= factor
 
     # ------------------------------------------------------------------ couple
     def couple(self, state: State, t: float) -> None:
-        """Restore link capacity, then amplify risk and book exposure cost.
+        """Amplify risk and book exposure cost.
 
         Runs after ``transport`` and after the economic lens has set the base
-        ``risk`` field, so multiplying here lands on real values.
+        ``risk`` field, so multiplying here lands on real values. No capacity
+        restore is needed — the rain tax lived in the per-step ``edge_cap_mult``,
+        not in the substrate (ADR-0021).
         """
-        sub = state.substrate
-        if self._saved_edge_cap is not None and self._saved_edge_cap.shape == sub.edge_cap.shape:
-            sub.edge_cap[:] = self._saved_edge_cap
-        self._saved_edge_cap = None
-
         wet = self._wetness(t, self._shelter(state))
         # Multiplicatively amplify the standing crowd-safety risk field.
         if "risk" in state.fields:
