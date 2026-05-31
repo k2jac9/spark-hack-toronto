@@ -15,27 +15,19 @@ import argparse
 import json
 import sys
 
-from .adapters import civic_safety_by_node, downtown_scenario
+from .adapters import downtown_scenario
 from .kernel import Simulation
-from .lenses import BusinessFlow, EconomicLens, EventSurge, SafetyLens
 from .narrate import build_insight
 from .optimize import objective, optimize
+from .scenarios import default_lens_stack
 
 
 def _lenses(sc, *, business: bool = False, safety: bool = False):
-    ls = [
-        EventSurge(events=sc.events),
-        EconomicLens(),
-    ]
-    if safety:
-        # The civic risk app, made literal: lift address-level safety risk onto the
-        # substrate and price crowd crush through the least-safe districts.
-        ls.append(SafetyLens(civic_safety_by_node(sc.substrate)))
-    if business:
-        # Sports-Urban-Intelligence: price the local trade a crush destroys so the
-        # release lever is optimized for transit + safety + economics together.
-        ls.append(BusinessFlow(sc.venue_id))
-    return ls
+    """The CLI lens stack, via the shared builder so the CLI and API can never run
+    different stacks (ADR-0022). The CLI omits WeatherLens (no shelter lever) — the
+    deliberate, documented reason ``make urbanos-cli`` and the :8001 UI report
+    different headline numbers."""
+    return default_lens_stack(sc, safety=safety, business=business)
 
 
 def main(argv: list[str] | None = None) -> int:

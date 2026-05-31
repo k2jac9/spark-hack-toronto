@@ -21,7 +21,6 @@ Endpoints:
 from __future__ import annotations
 
 import math
-import numbers
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -32,18 +31,20 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from urban_os.adapters import civic_safety_by_node, downtown_scenario
+from urban_os.adapters import downtown_scenario
 from urban_os.adapters.toronto import NODE_GROUPS
 from urban_os.kernel import Simulation
-from urban_os.lenses import (
-    BusinessFlow,
-    EconomicLens,
-    EventSurge,
-    SafetyLens,
-    WeatherLens,
-)
 from urban_os.narrate import build_insight
-from urban_os.optimize import cost_breakdown, objective, optimize
+from urban_os.optimize import cost_breakdown, optimize
+from urban_os.scenarios import default_lens_stack
+from urban_os.serialize import native as _native, peak_dict as _peak_dict, r as _r
+from urban_os.services import (
+    BENEFIT_DEFINITIONS,
+    cross_domain_block as _cross_domain_block,
+    cross_domain_components as _cross_domain_components,
+    four_lens_J as _four_lens_J,
+    four_lens_stack as _four_lens_stack,
+)
 
 # The civic address-risk app, mounted same-origin at /civic so the unified shell
 # can reach /civic/addresses, /civic/analyze, /civic/health and /civic/ without a
@@ -107,67 +108,12 @@ def _scenario():
 
 
 def _lenses(sc):
-    """The three-lens stack the kernel/optimizer/narrator run against.
+    """The optimizer/narrator stack (EventSurge + Economic + Weather).
 
-    Order matters: WeatherLens.couple multiplies the standing ``risk`` field, so
-    it must run AFTER EconomicLens has populated it (see ADR-0007). The rain cell
-    peaks with the egress wave (``peak_time = event_end``) so its drainage tax +
-    crush-risk bonus land while the crowd is on the platforms. It contributes a
-    second optimizer lever (shelter coverage) which the grid search composes with
-    EventSurge's staggered release automatically.
-    """
-    return [
-        EventSurge(events=sc.events),
-        EconomicLens(),
-        WeatherLens(
-            peak_time=sc.event_end,
-            intensity=0.7,
-            width=20.0,
-            crowd_size=sc.total_crowd,
-        ),
-    ]
-
-
-def _r(x: float, places: int = 3) -> float:
-    """Round to keep the payload small; always returns a native float.
-
-    Coerces numpy scalars to a native ``float`` (numpy scalars are NOT
-    JSON-serializable — this is the boundary that guarantees no numpy leaks into
-    a response). Non-finite values (NaN/±inf) are clamped to ``0.0`` so a
-    degenerate field can never produce an invalid JSON token (``NaN``/``Infinity``
-    are not legal JSON and would break strict parsers in the browser).
-    """
-    v = float(x)
-    if not math.isfinite(v):
-        return 0.0
-    return round(v, places)
-
-
-def _native(obj):
-    """Recursively coerce a (possibly numpy-laced) structure to native Python.
-
-    ``optimize.OptResult.to_dict()`` carries lever values straight off an
-    ``np.arange`` grid, so its ``params``/``trials`` hold ``numpy.float64``
-    scalars. Those happen to JSON-encode today (numpy floats subclass ``float``)
-    but still violate the "no numpy leakage at the boundary" invariant and would
-    break a stricter encoder. We can't touch ``optimize.py`` (other workstreams
-    own it), so we sanitize its blob here. Non-finite floats are clamped to 0.0
-    to keep the JSON strictly valid.
-    """
-    if isinstance(obj, dict):
-        return {k: _native(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_native(v) for v in obj]
-    if isinstance(obj, bool):  # bool before int/float (bool is an int subclass)
-        return bool(obj)
-    if isinstance(obj, np.bool_):  # numpy bool is NOT a python bool/Integral
-        return bool(obj)
-    if isinstance(obj, numbers.Integral):
-        return int(obj)
-    if isinstance(obj, numbers.Real):
-        f = float(obj)
-        return f if math.isfinite(f) else 0.0
-    return obj  # str / None / already-native pass through unchanged
+    Delegates to the shared :func:`urban_os.scenarios.default_lens_stack` so the
+    CLI and API can never run different stacks (ADR-0022). WeatherLens contributes
+    the shelter-coverage optimizer lever and must follow Economic (ADR-0007)."""
+    return default_lens_stack(sc, weather=True)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -372,95 +318,6 @@ def simulate(
     }
 
 
-def _four_lens_stack(sc):
-    """The full four-lens stack (transit + economic + civic safety + business),
-    same composition ``_cross_domain`` uses. SafetyLens is made literal by the
-    civic-risk → node fusion; BusinessFlow scores retail around the primary venue."""
-    return [
-        EventSurge(events=sc.events),
-        EconomicLens(),
-        SafetyLens(civic_safety_by_node(sc.substrate)),
-        BusinessFlow(sc.venue_id),
-    ]
-
-
-def _four_lens_J(stack, result) -> float:
-    """Objective J of a four-lens run = the sum of every lens's cost (the same
-    additive objective the optimizer minimises). Native float, no numpy leak."""
-    return float(sum(float(ln.cost(result)) for ln in stack))
-
-
-# ADR-0019: every benefit number we surface carries its definition, so the UI (and
-# anyone reading the JSON) can label it. The audits found three differently-derived
-# "benefit" figures shown unlabeled; these strings are the single source of truth
-# for what each one means. Keys here MUST match the keys returned by the endpoints.
-BENEFIT_DEFINITIONS: dict[str, str] = {
-    "j_avoided": (
-        "Reduction in the single combined objective J (the one number the optimizer "
-        "minimises). Conservative and double-count-free: this is the honest headline "
-        "and equals the narrator's 'net intervention benefit'."
-    ),
-    "cross_domain_benefit": (
-        "Additive sum of the per-domain dollar improvements (transit + public safety "
-        "+ local business). Larger than j_avoided because the domains are summed "
-        "independently and can overlap — an upper, cross-domain framing, not a single "
-        "objective. Computed once and shared by /lenses and /optimize so they agree."
-    ),
-    "combined_benefit": (
-        "Deprecated alias retained for the current UI. On /optimize it equals "
-        "cross_domain_benefit; on /lenses it is the four-lens J reduction "
-        "(base_J - cur_J). Prefer the explicit j_avoided / cross_domain_benefit keys."
-    ),
-}
-
-
-def _cross_domain_components(
-    sc, *, release: float, shelter: float, safety: bool = True, business: bool = True
-) -> dict:
-    """Additive per-domain dollar improvements of ``(release, shelter)`` vs do-nothing.
-
-    SINGLE SOURCE OF TRUTH for the ``cross_domain_benefit`` headline used by BOTH
-    /lenses and /optimize, so the two surfaces can never disagree (contract-tested
-    in ``test_benefit_semantics``). Honest framing: this is *additive* across domains
-    — the components are summed independently and may overlap, so it is deliberately
-    NOT the conservative single-objective number (see ``j_avoided``).
-
-    - transit_savings: J reduction over the optimizer's weather-aware stack.
-    - safety_reduction: civic SafetyLens cost avoided (0 when the lens is toggled off).
-    - business_recovered: BusinessFlow loss avoided (0 when toggled off).
-    """
-    # Transit: J over the exact stack the optimizer/narrator search (incl. WeatherLens).
-    cur_t, base_t = _lenses(sc), _lenses(sc)
-    cur_tr = Simulation(sc.substrate, cur_t,
-        params={"release_minutes": release, "shelter_fraction": shelter}, dt=sc.dt).run(sc.horizon)
-    base_tr = Simulation(sc.substrate, base_t,
-        params={"release_minutes": 0.0, "shelter_fraction": 0.0}, dt=sc.dt).run(sc.horizon)
-    transit_savings = objective(base_tr, base_t) - objective(cur_tr, cur_t)
-
-    # Safety + business: the civic SafetyLens + BusinessFlow at the same levers.
-    cur_s, base_s = _four_lens_stack(sc), _four_lens_stack(sc)
-    cur4 = Simulation(sc.substrate, cur_s,
-        params={"release_minutes": release, "shelter_fraction": shelter}, dt=sc.dt).run(sc.horizon)
-    base4 = Simulation(sc.substrate, base_s,
-        params={"release_minutes": 0.0, "shelter_fraction": 0.0}, dt=sc.dt).run(sc.horizon)
-    cur_safety = next(ln for ln in cur_s if ln.name == "safety")
-    base_safety = next(ln for ln in base_s if ln.name == "safety")
-    safety_reduction = (
-        float(base_safety.cost(base4)) - float(cur_safety.cost(cur4)) if safety else 0.0
-    )
-    business_recovered = (
-        float(sum(base4.series("business_lost"))) - float(sum(cur4.series("business_lost")))
-        if business else 0.0
-    )
-    total = transit_savings + safety_reduction + business_recovered
-    return {
-        "transit_savings": transit_savings,
-        "safety_reduction": safety_reduction,
-        "business_recovered": business_recovered,
-        "total": total,
-    }
-
-
 @app.get("/lenses")
 def lenses_endpoint(
     release_minutes: float = Query(0.0, ge=0.0, le=20.0),
@@ -543,40 +400,6 @@ def lenses_endpoint(
     )
 
 
-def _peak_dict(result) -> dict:
-    p = result.peak_congestion()
-    return {
-        "node": p["node"],
-        "label": p["label"],
-        "congestion": _r(p["congestion"]),
-        "t": _r(p["t"], 1),
-    }
-
-
-def _cross_domain(sc, best_params: dict) -> dict:
-    """Impact of the *same* optimized release on the other two lenses — computed
-    separately so the optimizer + J breakdown above are untouched (no headline
-    change). Honest framing: the release the optimizer picked also does this for
-    public safety + local business. Two cheap extra sims (baseline vs best); never
-    re-runs the lever search.
-    """
-    stack = [
-        EventSurge(events=sc.events),
-        EconomicLens(),
-        SafetyLens(civic_safety_by_node(sc.substrate)),  # civic risk → node field
-        BusinessFlow(sc.venue_id),                       # retail around the primary venue
-    ]
-    safety = next(ln for ln in stack if ln.name == "safety")
-    base = Simulation(sc.substrate, stack, params={"release_minutes": 0.0}, dt=sc.dt).run(sc.horizon)
-    best = Simulation(sc.substrate, stack, params=dict(best_params), dt=sc.dt).run(sc.horizon)
-    base_lost = float(sum(base.series("business_lost")))
-    best_lost = float(sum(best.series("business_lost")))
-    return {
-        "safety": {"baseline": _r(safety.cost(base), 0), "best": _r(safety.cost(best), 0)},
-        "business": {"baseline_lost": _r(base_lost, 0), "recovered": _r(base_lost - best_lost, 0)},
-    }
-
-
 @app.get("/optimize")
 def optimize_endpoint(
     safety: bool = Query(True), business: bool = Query(True)
@@ -621,46 +444,4 @@ def optimize_endpoint(
         # The same release, scored across the user-selected cross-domain lenses.
         **_cross_domain_block(sc, opt.best_params, safety, business),
         "benefit_definitions": BENEFIT_DEFINITIONS,
-    }
-
-
-def _cross_domain_safe(sc, best_params: dict):
-    """Never let the cross-domain extras break the core /optimize response."""
-    try:
-        return _cross_domain(sc, best_params)
-    except Exception:
-        return None
-
-
-def _cross_domain_block(sc, best_params: dict,
-                        safety: bool, business: bool) -> dict:
-    """Cross-domain panel + the canonical additive benefit at the optimizer's levers.
-
-    The headline ``cross_domain_benefit`` comes from the SHARED
-    ``_cross_domain_components`` helper — the same one /lenses uses — so both surfaces
-    report the identical additive number at the same levers (contract-tested in
-    ``test_benefit_semantics``). Toggling a lens off removes its dollars from the
-    additive total. ``combined_benefit`` is retained as a deprecated alias for the
-    current UI (see ``BENEFIT_DEFINITIONS``)."""
-    release = float(best_params.get("release_minutes", 0.0))
-    shelter = float(best_params.get("shelter_fraction", 0.0))
-    comp = _cross_domain_components(
-        sc, release=release, shelter=shelter, safety=safety, business=business
-    )
-    # Per-lens baseline/best panel (display only) — never breaks the core response.
-    full = _cross_domain_safe(sc, best_params)
-    cd = None
-    if full:
-        cd = {}
-        if safety and full.get("safety"):
-            cd["safety"] = full["safety"]
-        if business and full.get("business"):
-            cd["business"] = full["business"]
-    return {
-        "cross_domain": cd,
-        "enabled": {"safety": bool(safety), "business": bool(business)},
-        "cross_domain_benefit": _r(comp["total"], 2),
-        "cross_domain_components": {k: _r(v, 2) for k, v in comp.items() if k != "total"},
-        # Deprecated alias of cross_domain_benefit (see benefit_definitions).
-        "combined_benefit": _r(comp["total"], 2),
     }
