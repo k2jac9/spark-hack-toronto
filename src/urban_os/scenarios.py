@@ -12,7 +12,7 @@ that Economic populates (ADR-0007).
 """
 from __future__ import annotations
 
-from .adapters import civic_safety_by_node
+from .adapters import civic_activity_by_node, civic_safety_by_node
 from .lenses import (
     BusinessFlow,
     EconomicLens,
@@ -66,7 +66,7 @@ def default_lens_stack(
     return stack
 
 
-def extra_display_lenses() -> list:
+def extra_display_lenses(sc=None) -> list:
     """The four supplementary intelligence lenses — EMS-access, emissions,
     noise/livability, fare-revenue.
 
@@ -77,5 +77,15 @@ def extra_display_lenses() -> list:
     ``J``, so promoting a lens to a *decision* objective (which would move the
     headline numbers) stays an explicit, separate choice — the demo's calibrated
     transit+safety+business figures are unchanged.
+
+    When a scenario ``sc`` is given, ``NoiseLivabilityLens`` is grounded in the REAL
+    civic Activity overlay (building permits + business licences fused onto nodes,
+    ADR-0014) — the same address→node fusion ``SafetyLens`` uses. Without ``sc`` (or
+    if civic data is absent) it falls back to its deterministic synthetic weight.
     """
-    return [EmsAccessLens(), EmissionsLens(), NoiseLivabilityLens(), FareRevenueLens()]
+    noise = (
+        NoiseLivabilityLens(civic_activity_by_node(sc.substrate))
+        if sc is not None
+        else NoiseLivabilityLens()
+    )
+    return [EmsAccessLens(), EmissionsLens(), noise, FareRevenueLens()]

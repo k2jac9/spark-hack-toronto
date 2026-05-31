@@ -8,12 +8,13 @@ livability cost (noise, disturbance, complaints). Same contract as
 staggered-release lever — which thins the crush — also lowers this term, making
 the optimizer route the surge away from where people sleep.
 
-Grounding: ``node_residential`` is intended to come from the Toronto building-
-permits feed (``permits__downtown.csv`` ``RESIDENTIAL`` / ``DWELLING_UNITS_CREATED``,
-geocoded to the nearest node — the same address→node fusion ``SafetyLens`` uses).
-Until that geocode is wired, it falls back to a synthetic-but-flagged field so the
-lens runs end-to-end. The dollar weight is synthetic-but-plausible, flagged in
-provenance.
+Grounding: when constructed via ``scenarios.extra_display_lenses(sc)`` the weight is
+the REAL civic **Activity** overlay (``adapters.civic_activity_by_node`` — building
+permits + business licences fused to nodes by proximity, ADR-0014), the same
+address→node fusion ``SafetyLens`` uses for its safety overlay. Constructed bare
+(no mapping) it falls back to a deterministic synthetic-but-flagged field so the
+lens still runs offline/in unit tests. The dollar weight is synthetic-but-plausible,
+flagged in provenance.
 """
 from __future__ import annotations
 

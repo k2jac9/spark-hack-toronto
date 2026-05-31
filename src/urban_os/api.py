@@ -343,7 +343,7 @@ def lenses_endpoint(
         # Supplementary display lenses ride along in the SAME two sims so they cost
         # nothing extra; they are excluded from cur_J/base_J (those sum cur_stack /
         # base_stack only), so the headline numbers are unchanged (ADR: additive).
-        extra = _extra_display_lenses()
+        extra = _extra_display_lenses(sc)
         current = Simulation(
             sc.substrate,
             cur_stack + extra,
@@ -403,6 +403,52 @@ def lenses_endpoint(
             "benefit_definitions": BENEFIT_DEFINITIONS,
         }
     )
+
+
+@app.get("/overlays")
+def overlays_endpoint() -> dict:
+    """Per-node static intelligence overlays for the map's layer toggle: EMS-access
+    criticality, civic Activity (the noise/livability grounding), and a do-nothing
+    emissions hotspot. One cheap baseline sim; every field normalised 0..1 so the
+    client can drive the heatmap weight directly. Static (lever-independent) by
+    design — these are *where* each domain is exposed, not the live ripple."""
+    sc = _scenario()
+    extra = _extra_display_lenses(sc)
+    stack = default_lens_stack(sc, weather=True) + extra
+    try:
+        res = Simulation(
+            sc.substrate, stack,
+            params={"release_minutes": 0.0, "shelter_fraction": 0.0}, dt=sc.dt,
+        ).run(sc.horizon)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="overlay computation failed") from exc
+
+    sub = sc.substrate
+    ems = np.asarray(next(l for l in extra if l.name == "ems_access")._crit, dtype=float)
+    resid = np.asarray(next(l for l in extra if l.name == "noise_livability")._res, dtype=float)
+    # Emissions hotspot = peak over-capacity crowding per node (the field the lens
+    # prices), derived from the recorded frame loads so /simulate stays untouched.
+    emit = np.zeros(sub.n)
+    for fr in res.frames:
+        emit = np.maximum(emit, np.maximum(0.0, np.asarray(fr["load"]) - sub.capacity))
+
+    def _norm(a):
+        m = float(a.max())
+        return a / m if m > 0 else a
+
+    ems_n, resid_n, emit_n = _norm(ems), _norm(resid), _norm(emit)
+    nodes = [
+        {
+            "id": sub.ids[i],
+            "lat": float(sub.lat[i]),
+            "lng": float(sub.lng[i]),
+            "ems_access": _r(float(ems_n[i]), 3),
+            "residential": _r(float(resid_n[i]), 3),
+            "emissions": _r(float(emit_n[i]), 3),
+        }
+        for i in range(sub.n)
+    ]
+    return _native({"nodes": nodes})
 
 
 @app.get("/optimize")

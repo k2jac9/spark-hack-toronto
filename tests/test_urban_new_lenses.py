@@ -133,3 +133,49 @@ def test_lenses_endpoint_exposes_extra_lenses_without_moving_headline():
                      params={"release_minutes": 8.0, "shelter_fraction": 0.5},
                      dt=sc.dt).run(sc.horizon)
     assert body["combined_cost"] == round(four_lens_J(stack, res), 2)
+
+
+# ---- noise lens real-data grounding (Activity overlay) --------------------
+def test_civic_activity_overlay_well_formed():
+    """The adapter's Activity-index → node-field fusion yields one bounded value per
+    node (mirrors the civic-safety fusion contract)."""
+    from urban_os.adapters import civic_activity_by_node
+    from urban_os.adapters.toronto import downtown_substrate
+
+    sub = downtown_substrate()
+    overlay = civic_activity_by_node(sub)
+    assert set(overlay) == set(sub.ids)
+    assert all(np.isfinite(v) for v in overlay.values())
+
+
+def test_extra_display_lenses_grounds_noise_from_real_data():
+    """extra_display_lenses(sc) grounds NoiseLivabilityLens in the real Activity
+    overlay; bare construction stays synthetic."""
+    from urban_os.scenarios import extra_display_lenses
+
+    sc = downtown_scenario()
+    grounded = next(l for l in extra_display_lenses(sc) if l.name == "noise_livability")
+    bare = next(l for l in extra_display_lenses() if l.name == "noise_livability")
+    assert grounded.node_residential is not None
+    assert set(grounded.node_residential) == set(sc.substrate.ids)
+    assert bare.node_residential is None
+
+
+# ---- /overlays endpoint (map heat layers) ---------------------------------
+def test_overlays_endpoint_returns_normalized_node_fields():
+    from fastapi.testclient import TestClient
+
+    from urban_os.api import app
+
+    client = TestClient(app)
+    r = client.get("/overlays")
+    assert r.status_code == 200
+    nodes = r.json()["nodes"]
+    assert len(nodes) > 0
+    for o in nodes:
+        assert {"id", "lat", "lng", "ems_access", "residential", "emissions"} <= set(o)
+        for k in ("ems_access", "residential", "emissions"):
+            assert 0.0 <= o[k] <= 1.0
+    # normalised 0..1 → each field peaks at exactly 1.0 on its hottest node.
+    for k in ("ems_access", "residential", "emissions"):
+        assert max(o[k] for o in nodes) == 1.0
