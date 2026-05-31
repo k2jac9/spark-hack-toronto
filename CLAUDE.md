@@ -11,7 +11,7 @@ python -m venv .venv && . .venv/bin/activate
 make install && make install-hooks      # deps + pre-push test gate
 cp .env.example .env
 ```
-Then confirm with `make test` (expect 26 green) and tell them `make demo` opens the offline
+Then confirm with `make test` (expect 429 green) and tell them `make demo` opens the offline
 map at http://localhost:8000/. Point them at the workflow + "Current status" below.
 
 ## What this is
@@ -61,7 +61,7 @@ Layout: `src/civic_analyst/{ingest,graph,agents,api}`, `tests/`, `scripts/`, `de
 ## Current status (handoff — 2026-05-31, demo day)
 **Full read for the next session:** `docs/HANDOFF.md` (@cyberqubit → @k2jac9), `docs/PITCH.md`
 (the pitch), `docs/ON_THE_BOX.md` (box runbook). A fresh clone builds + passes all tests
-(`make test` ≈ 311 green). Everything below is **merged on `main` + CI-green**.
+(`make test` ≈ 429 green). Everything below is **merged on `main` + CI-green**.
 
 **The project is two apps that share one architecture:**
 - **`civic_analyst` (`:8000`)** — the address risk app: 3 fused Toronto datasets (DineSafe +
