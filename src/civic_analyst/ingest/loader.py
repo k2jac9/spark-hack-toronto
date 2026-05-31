@@ -117,12 +117,31 @@ def _clean_value(val: Any) -> str:
     return " ".join(str(val).split())
 
 
+# Whole-token placeholders that leak into single-field source addresses when an
+# upstream join stringified a null unit/component (e.g. "142 Parliament St None
+# M5A 2Z1" or "...nan..."). Matched case-insensitively but only as a *whole*
+# whitespace-delimited token, so real street names (Annette, Nanton, …) and
+# genuine units ("Unit-6") are never touched.
+_NULL_ADDRESS_TOKENS = frozenset({"none", "nan", "null", "n/a", "na"})
+
+
+def _clean_address(val: Any) -> str:
+    """Clean an address field and drop stringified-null placeholder tokens
+    ("None"/"nan"/…) that leaked in from an upstream join, collapsing the
+    resulting double spaces. Keeps every real component intact."""
+    cleaned = _clean_value(val)
+    if not cleaned:
+        return ""
+    tokens = [t for t in cleaned.split(" ") if t.lower() not in _NULL_ADDRESS_TOKENS]
+    return " ".join(tokens)
+
+
 def _address(row: dict[str, Any], plan: dict[str, Any]) -> str | None:
     if plan["address_single"]:
-        val = _clean_value(row.get(plan["address_single"]))
+        val = _clean_address(row.get(plan["address_single"]))
         return val or None
     if plan["address_parts"]:
-        parts = [_clean_value(row.get(c)) for c in plan["address_parts"]]
+        parts = [_clean_address(row.get(c)) for c in plan["address_parts"]]
         joined = " ".join(p for p in parts if p)
         return joined or None
     return None
