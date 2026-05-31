@@ -26,6 +26,30 @@ def test_real_slice_loads_in_bbox_with_some_risk():
     )
 
 
+def test_no_stringified_null_in_address_labels():
+    """Null unit/component fields are sometimes str-joined upstream, leaking a
+    literal "None"/"nan" token into single-field source addresses (e.g.
+    "630 DANFORTH AVE None M4K 1R3"). Those placeholders must never reach a
+    human-facing label, while genuine components (units, street names) survive.
+    """
+    g = CivicGraph()
+    load_into_graph(g, SLICE)
+    labels = [a["label"] for a in g.addresses(with_coords=True)]
+    assert labels, "expected geocoded downtown addresses"
+
+    placeholders = {"none", "nan", "null", "n/a", "na"}
+    offenders = [
+        lab
+        for lab in labels
+        if any(tok.lower() in placeholders for tok in lab.split())
+    ]
+    assert not offenders, f"placeholder token leaked into labels: {offenders}"
+
+    # The fix must not erase real components: a known unit address keeps its unit.
+    denison = [lab for lab in labels if "DENISON" in lab.upper()]
+    assert denison and any("Unit-6" in lab for lab in denison), denison
+
+
 def test_real_cross_dataset_fusion():
     """The slice must show genuine multi-dataset linking across all three sources."""
     g = CivicGraph()
