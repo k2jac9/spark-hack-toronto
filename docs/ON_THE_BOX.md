@@ -22,8 +22,10 @@ cp .env.example .env
 make test          # expect 26 green
 make demo          # offline map at http://localhost:8000/  (DATA_DIR=demo_data)
 ```
-Sanity: open the map → pins render offline → click **500 Bloor St W** → risk ~0.92 ("high"),
-findings, **✓ verify** reveals real source records. (Narratives are deterministic until
+Sanity: open the map → pins render offline → click **500 Bloor St W** → two-index read
+(medium Activity / low Safety, ADR-0014), findings across 3 datasets, **✓ verify** reveals real
+source records. (For a *high* pin use **40 Bay St** or **1 Blue Jays Way** — high Activity.
+Narratives are deterministic until
 step 2.)
 
 ## 2. Wire the real local model (Nemotron via Ollama)
@@ -87,8 +89,8 @@ Original from-scratch install (if the box is ever rebuilt): NemoClaw via the DGX
 - Confirm the map needs **no network** (offline PMTiles) — unplug to prove it.
 
 ## Demo run-of-show (~60s)
-Open map (offline) → "27 downtown businesses, red = high risk" → click **500 Bloor St W**
-→ risk ~0.92 ("high"), findings → **click ✓ verify** to reveal the source record across DineSafe +
+Open map (offline) → "27 downtown businesses, scored on Safety + Activity" → click **500 Bloor St W**
+→ two-index read + findings → **click ✓ verify** to reveal the source record across DineSafe +
 Building Permits + licences → close with `/digest` (city-wide briefing) or the NemoClaw
 agent answering a live question.
 
