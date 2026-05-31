@@ -14,12 +14,20 @@
       color: var(--text); background: var(--map-bg); overflow: hidden; }
     #map { position: absolute; inset: 0; background: var(--map-bg); }
 
+    /* F-10: skip link — off-screen until keyboard-focused, then jumps to the panel. */
+    .skip-link { position: absolute; left: 8px; top: -48px; z-index: 20; padding: 8px 14px;
+      background: var(--surface-sel); color: var(--accent-text); border: 1px solid var(--accent);
+      border-radius: var(--r); font-size: 13px; font-weight: 700; text-decoration: none;
+      transition: top .15s ease; }
+    .skip-link:focus { top: 8px; }
+
     /* Top bar — wordmark + live status. */
     #topbar { position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: 5;
       display: flex; align-items: center; gap: 16px; padding: 0 18px;
       background: linear-gradient(180deg, rgba(5,8,15,.92), rgba(5,8,15,0));
       pointer-events: none; }
-    #wordmark { font-weight: 800; letter-spacing: .18em; font-size: 16px;
+    /* <h1> wordmark — reset the UA heading margins/size so it still reads as the bar logo. */
+    #wordmark { margin: 0; font-weight: 800; letter-spacing: .18em; font-size: 16px;
       color: var(--text-strong); text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent); }
     #wordmark .os { color: var(--accent); }
     #scenario-tag { font-size: 12px; color: var(--text-soft); }
@@ -49,9 +57,12 @@
       box-shadow: 0 10px 40px rgba(0,0,0,.5); }
     #panel.swap { animation: swap .28s ease; }
     @keyframes swap { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+    /* .ptitle is an <h2> (per-lens section heading); the class keeps its visual size. */
     .ptitle { font-size: 18px; font-weight: 800; margin: 0 0 2px; color: var(--text-strong); }
     .psub { font-size: 12px; color: var(--text-muted); margin: 0 0 12px; }
-    h2 { font-size: 12px; margin: 16px 0 6px; color: var(--text-muted); font-weight: 600;
+    /* Sub-section labels are real <h3> headings (was a styling-only <h2>); keeps the
+       document outline ordered h1 → h2(lens) → h3(section). */
+    .panel-h, h3.panel-h { font-size: 12px; margin: 16px 0 6px; color: var(--text-muted); font-weight: 600;
       text-transform: uppercase; letter-spacing: .05em; }
     .hint { color: var(--text-muted); font-size: 13px; }
     .num { font-variant-numeric: tabular-nums; font-family: var(--num); }
@@ -80,9 +91,14 @@
     .hero-lever { background: var(--surface-2); border: 1px solid var(--accent); border-radius: var(--r-lg);
       padding: 12px 14px; margin: 12px 0; box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 22%, transparent); }
     .hero-lever .lh { font-weight: 700; color: var(--accent-text); font-size: 13px; }
-    .anchors { display: flex; justify-content: space-between; font-size: 10px;
+    /* F-12: helper text was 10px (below the 12px minimum) — bumped to 12px. */
+    .anchors { display: flex; justify-content: space-between; font-size: 12px;
       color: var(--text-dim); margin-top: 4px; }
     .anchors span:nth-child(2) { color: var(--text-muted); }
+    /* F-2: caption naming the non-monotonic sweet-spot band so users don't push a
+       lever past its optimum (benefit falls past ~16m / shelter can go negative). */
+    .optband { font-size: 12px; color: var(--text-muted); margin: 2px 0 0; }
+    .optband b { color: var(--accent-text); font-weight: 700; }
 
     button.act { background: var(--surface-sel); color: var(--accent-text); border: 1px solid var(--accent);
       border-radius: var(--r-lg); padding: 9px 14px; font-size: 14px; font-weight: 700; cursor: pointer; width: 100%; }
@@ -155,17 +171,29 @@
     }
     @media (max-width: 480px) {
       #wordmark { font-size: 14px; }
-      #status { font-size: 11px; }
-      .lens { width: 54px; font-size: 10px; } .lens .ic { font-size: 18px; }
+      #status { font-size: 12px; }
+      .lens { width: 54px; font-size: 11px; } .lens .ic { font-size: 18px; }
       #panel { max-height: 52vh; padding: 12px 14px; }
+      /* F-13: at ~390px the side-by-side index/before-after/meter cards plus the
+         status pill pushed ~21px past the viewport. Let the multi-column rows wrap,
+         clamp the big numerals, and keep the topbar pill from forcing width. */
+      .idxrow, .ba { flex-wrap: wrap; }
+      .idx, .ba .card { min-width: 130px; }
+      .idx-score { font-size: 24px; }
+      .combined .v { font-size: 30px; }
+      #status { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #topbar { gap: 6px; }
     }
   </style>
 </head>
 <body>
+  <!-- F-10c: skip link lets keyboard users jump past the map straight to the panel. -->
+  <a href="#panel" class="skip-link">Skip to controls</a>
   <main id="map" aria-label="Toronto city canvas"></main>
 
   <div id="topbar">
-    <span id="wordmark">URBAN <span class="os">OS</span></span>
+    <!-- F-10b: the wordmark is the page's real <h1> (was a styling-only span). -->
+    <h1 id="wordmark">URBAN <span class="os">OS</span></h1>
     <span id="scenario-tag" class="num"></span>
     <span id="status">booting…</span>
   </div>
@@ -177,7 +205,8 @@
     <button class="lens" data-lens="economy" type="button" aria-label="Economy lens — local business" title="Economy — local business"><span class="ic" aria-hidden="true">💵</span>Economy</button>
   </nav>
 
-  <aside id="panel" role="complementary" aria-live="polite"></aside>
+  <!-- tabindex=-1 so the skip link can move focus here (programmatic focus target). -->
+  <aside id="panel" role="complementary" aria-live="polite" tabindex="-1"></aside>
 
   <script src="/static/vendor/maplibre-gl.js"></script>
   <script src="/static/vendor/pmtiles.js"></script>
@@ -190,7 +219,15 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g,
     (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   const mult2 = (x) => Number(x || 0).toFixed(2);
-  const dK = (x) => '$' + Math.round(Number(x || 0) / 1000) + 'k';
+  // F-14: a positive-but-tiny residual (e.g. $300 of safety/business cost at maximum
+  // intervention) rounds to "$0k" and reads as ABSOLUTE elimination, which is false —
+  // a floor always remains. Show "<$1k" for any non-zero value under $500 so the
+  // headline never claims the risk/loss was driven to nothing. True zero stays "$0k".
+  const dK = (x) => {
+    const n = Number(x || 0);
+    if (n > 0 && n < 500) return '<$1k';
+    return '$' + Math.round(n / 1000) + 'k';
+  };
   const css = (v, f) => (getComputedStyle(document.documentElement).getPropertyValue(v).trim() || f);
   // Short, ASCII-only label for the MAP's SDF text (the vendored OpenSans glyph set
   // ships only the Latin ranges, so an em-dash/arrow in a label 404s the glyph PBF
@@ -207,6 +244,8 @@
   let RELEASE = 0, SHELTER = 0;
   let LENS = null;
   let BASELINE = null;    // /lenses at (0,0) — the do-nothing reference for the ripple
+  let BENEFIT_DEFS = {};  // ADR-0019 benefit_definitions map (labels the $ headlines, F-4)
+  const benefitTip = (k) => esc(BENEFIT_DEFS[k] || '');
 
   const colorFor = (c) => c >= 1 ? css('--risk-high','#ef4444') : c >= .75 ? css('--risk-medium','#f59e0b')
     : c >= .5 ? '#84cc16' : c >= .2 ? '#a3e635' : css('--risk-none','#22c55e');
@@ -241,11 +280,25 @@
   const hover = new maplibregl.Popup({ closeButton:false, closeOnClick:false, offset:12 });
 
   // ---- urban_os substrate features ----
+  // F-5: the City lens shows steady-state crush (the worst congestion each node
+  // reaches over the whole run), so the map is red where the panel says crush 3.73×.
+  // The Flow lens scrubs frame-by-frame, so it colours by the CURRENT frame.
+  let STEADY = false;  // true on the City lens → colour/glow by per-node peak congestion
+  function peakByNode() {
+    const out = {};  // {id: {congestion, load}} — worst congestion each node reaches
+    if (SIM) SIM.frames.forEach(f => f.nodes.forEach(n => {
+      const c = n.congestion || 0;
+      if (!out[n.id] || c > out[n.id].congestion) out[n.id] = { congestion:c, load:n.load||0 }; }));
+    return out;
+  }
   function osNodes() {
     const fr = SIM ? SIM.frames[FRAME] : null, byId = {};
     if (fr) fr.nodes.forEach(n => byId[n.id] = n);
+    const steadyById = STEADY ? peakByNode() : null;  // F-5: per-node worst-case
     return (SCEN ? SCEN.nodes : []).map(nd => {
-      const s = byId[nd.id] || { congestion:0, load:0, risk:0 };
+      const live = byId[nd.id] || { congestion:0, load:0, risk:0 };
+      // City: use the node's worst congestion over the run; Flow: the current frame.
+      const s = STEADY ? (steadyById[nd.id] || { congestion:0, load:0 }) : live;
       const base = nd.is_sink ? 7 : Math.max(7, Math.min(26, 6 + Math.log10(nd.capacity + 10) * 4));
       const r = nd.group === 'venue' ? base + 3 : base;
       const w = nd.is_sink ? 0 : Math.max(0, Math.min(1.5, s.congestion || 0));
@@ -304,7 +357,16 @@
       hover.setLngLat(e.lngLat).setHTML('<b>'+esc(p.label)+'</b><br>risk '+mult2(p.score)+' · '+esc(p.band)).addTo(map); });
     map.on('mouseleave', 'civ-pins', () => { map.getCanvas().style.cursor=''; hover.remove(); });
   }
-  function refreshOS() { setData('os-nodes', osNodes()); }
+  function refreshOS() { setData('os-nodes', osNodes()); updatePeakStatus(); }
+
+  // F-7: the header peak indicator is recomputed on EVERY model update (frame scrub,
+  // lever drag, lens switch) — not only when the optimizer drives it — so it can never
+  // go stale. ``SIM.peak`` is the run-wide peak (the steady-state crush the City shows).
+  function updatePeakStatus() {
+    if (!SIM || !SIM.peak) return;
+    const pk = SIM.peak;
+    setStatus('Peak <b>'+mult2(pk.congestion)+'×</b> at <b>'+esc(pk.label)+'</b> (t='+pk.t+'m)');
+  }
 
   // ---- data loaders ----
   async function loadSim(rel, shel) {
@@ -312,9 +374,7 @@
     setStatus('Simulating release <b>'+RELEASE+'m</b> · shelter <b>'+Math.round(SHELTER*100)+'%</b>…');
     SIM = await (await fetch('/simulate?release_minutes='+RELEASE+'&shelter_fraction='+SHELTER)).json();
     if (FRAME > SIM.frames.length-1) FRAME = 0;
-    refreshOS();
-    const pk = SIM.peak;
-    setStatus('Peak <b>'+mult2(pk.congestion)+'×</b> at <b>'+esc(pk.label)+'</b> (t='+pk.t+'m)');
+    refreshOS();   // refreshOS now also refreshes the header peak (F-7)
     return SIM;
   }
   async function lensesAt(rel, shel) {
@@ -335,14 +395,20 @@
     return '<div class="lever"><label for="rel">Staggered release <span id="rv" class="num">' + RELEASE + 'm</span></label>' +
       '<input id="rel" type="range" min="0" max="20" step="2" value="' + RELEASE + '"' +
       ' aria-label="Staggered release, minutes" aria-valuetext="' + RELEASE + ' minutes">' +
-      '<div class="anchors"><span>0m</span><span>more staggered →</span><span>20m</span></div></div>';
+      '<div class="anchors"><span>0m</span><span>more staggered →</span><span>20m</span></div>' +
+      // F-2: this lever is non-monotonic — combined benefit peaks near 14–16m and
+      // FALLS past it (the hold cost overtakes the crush relief). Name the band.
+      '<p class="optband">Sweet spot <b>~14–16m</b> · past ~16m the hold cost outweighs the relief.</p></div>';
   }
   function shelterLeverHTML() {
     const p = Math.round(SHELTER * 100);
     return '<div class="lever"><label for="shel">Shelter coverage <span id="sv" class="num">' + p + '%</span></label>' +
       '<input id="shel" type="range" min="0" max="1" step="0.2" value="' + SHELTER + '"' +
       ' aria-label="Shelter coverage, percent" aria-valuetext="' + p + ' percent">' +
-      '<div class="anchors"><span>0%</span><span>steps of 20%</span><span>100%</span></div></div>';
+      '<div class="anchors"><span>0%</span><span>steps of 20%</span><span>100%</span></div>' +
+      // F-2: shelter benefit can go NEGATIVE past ~60–80% (staffing cost overtakes
+      // the rain-exposure it removes) — de-emphasise the over-coverage tail.
+      '<p class="optband">Sweet spot <b>~40–60%</b> · past ~80% staffing cost can turn the benefit negative.</p></div>';
   }
   // Bind BOTH levers to the INPUT event (fires continuously on drag) so metrics
   // update live as the lever moves — not just on mouse-up (audit: change-only
@@ -369,19 +435,31 @@
     // ---- CITY: the overview + the "one lever, every lens" climax ----
     city: {
       enter() {
+        STEADY = true;  // F-5: City shows steady-state crush, not the pre-event frame
         vis('os-edges', true); vis('os-heatmap', true); vis('os-nodes', true); vis('os-nodes-lbl', true);
         vis('civ-pins', false);
         map.easeTo({ center:[-79.398, 43.6455], zoom:12.7, pitch:0, bearing:0, duration:700 });
         const evs = (SCEN.meta.events || []);
         paint(
-          '<div class="ptitle">One city. Every lens.</div>'+
+          '<h2 class="ptitle">One city. Every lens.</h2>'+
           '<p class="psub">'+evs.length+' concurrent events · <span class="num">'+Math.round(SCEN.meta.crowd_size).toLocaleString()+'</span> people into the Union ↔ Exhibition GO corridor.</p>'+
           '<div class="hero-lever"><div class="lh">⚡ One lever — staggered release</div>'+
             releaseLeverHTML() + shelterLeverHTML() +
+            // F-6: the lever state is shared across every lens — say so, so an
+            // optimized setting isn't silently overwritten when the user switches lens.
+            '<p class="optband">↪ These settings apply across all lenses (City · Flow · Economy).</p>'+
           '</div>'+
           '<div class="meters" id="meters">'+meterHTML('transit','Transit crush (Union ×)','—')+
             meterHTML('safety','Public-safety exposure','—')+meterHTML('business','Local business lost','—')+'</div>'+
-          '<div class="combined"><div class="k">Combined benefit — one lever, every lens</div><div class="v num" id="combined">—</div></div>'+
+          // F-4: the headline used to show three unexplained dollar figures. Now the
+          // big number is cross_domain_benefit, LABELLED "cross-domain (additive)" with
+          // its ADR-0019 definition on hover; the conservative single-objective J avoided
+          // is shown beneath, labelled "net benefit". Tooltips fill in once data loads.
+          '<div class="combined"><div class="k">Combined benefit — one lever, every lens</div>'+
+            '<div class="v num" id="combined" title="">—</div>'+
+            '<div class="optband" style="margin-top:6px">'+
+              '<span id="cd-label" title="">cross-domain (additive)</span> · '+
+              'net benefit <b id="net-benefit" class="num" title="">—</b></div></div>'+
           '<div class="row"><button class="act" id="opt">✨ Find the best intervention</button></div>'+
           '<p class="hint">Drag the lever: the city calms and all three lenses move together. “Find the best” runs the optimizer and lights the room.</p>'
         );
@@ -401,10 +479,10 @@
             return '<li><button type="button" data-label="'+esc(a.label)+'"><span class="dot bg-'+b+'"></span>'+
               '<span style="flex:1">'+esc(a.label)+'</span><span class="num b-'+b+'">'+Math.max(a.risk_safety,a.risk_activity).toFixed(2)+'</span></button></li>'; }).join('');
         paint(
-          '<div class="ptitle">🛡️ Safety lens</div>'+
+          '<h2 class="ptitle">🛡️ Safety lens</h2>'+
           '<p class="psub">The civic-risk app, as a kernel lens — address risk over 3 fused City of Toronto datasets. Every number is grounded; tap ✓ verify.</p>'+
           '<div class="row"><button class="gh" data-label="500 Bloor St W">★ 500 Bloor St W (3-dataset hero)</button></div>'+
-          '<h2>Highest-risk addresses</h2><ul id="addrlist">'+rows+'</ul>'+
+          '<h3 class="panel-h">Highest-risk addresses<span class="hint" style="text-transform:none;font-weight:400"> · ranked by most-elevated index</span></h3><ul id="addrlist">'+rows+'</ul>'+
           '<div id="detail"><p class="hint">Pick a pin or address for its grounded risk read.</p></div>'
         );
         panel.querySelector('#addrlist').addEventListener('click', e => { const b = e.target.closest('button[data-label]'); if (b) analyzeAddress(b.dataset.label); });
@@ -414,21 +492,29 @@
     // ---- FLOW: the egress simulation + levers + optimizer ----
     flow: {
       enter() {
+        STEADY = false;  // F-5: Flow scrubs frame-by-frame → colour by the current frame
+        refreshOS();
         vis('os-edges', true); vis('os-heatmap', true); vis('os-nodes', true); vis('os-nodes-lbl', true);
         vis('civ-pins', false);
         map.easeTo({ center:[-79.398, 43.6455], zoom:12.7, duration:700 });
         paint(
-          '<div class="ptitle">🌊 Flow lens</div>'+
+          '<h2 class="ptitle">🌊 Flow lens</h2>'+
           '<p class="psub">The FIFA convergence crunch — four venues empty at once. Scrub time; pull the levers.</p>'+
           '<div class="row"><button class="gh" id="play">▶ Play</button>'+
-            '<input id="time" type="range" min="0" max="'+((SIM?SIM.frames.length:1)-1)+'" value="'+FRAME+'" style="flex:1"></div>'+
+            // F-10a: the time scrubber was unlabelled — name it + announce the frame.
+            '<input id="time" type="range" min="0" max="'+((SIM?SIM.frames.length:1)-1)+'" value="'+FRAME+'" style="flex:1"'+
+            ' aria-label="Simulation time frame" aria-valuetext="frame '+FRAME+'"></div>'+
           releaseLeverHTML() + shelterLeverHTML() +
-          '<h2>Live cost (objective J)</h2><table class="breakdown"><tbody id="bd"></tbody></table>'+
+          // F-6: shared lever state — match the City note so a switch between lenses
+          // doesn't look like it silently changed (or discarded) the setting.
+          '<p class="optband">↪ Lever settings are shared with every lens (incl. the City optimizer pick).</p>'+
+          '<h3 class="panel-h">Live cost (objective J)</h3><table class="breakdown"><tbody id="bd"></tbody></table>'+
           '<div class="row"><button class="act" id="opt">✨ Find the best intervention</button></div>'+
           '<div id="opt-out"></div>'
         );
         const t = document.getElementById('time');
-        t.addEventListener('input', e => { FRAME = Number(e.target.value); refreshOS(); });
+        t.addEventListener('input', e => { FRAME = Number(e.target.value);
+          t.setAttribute('aria-valuetext', 'frame ' + FRAME); refreshOS(); });
         document.getElementById('play').addEventListener('click', togglePlay);
         const flowUpdate = debounce((r, s) => { stopPlay(); loadSim(r, s).then(() => { renderBreakdown(); resizeTime(); }); }, 200);
         bindLevers(flowUpdate);   // live on drag (debounced; /simulate is heavier)
@@ -439,10 +525,12 @@
     // ---- ECONOMY: business + the J split ----
     economy: {
       enter() {
+        STEADY = true;  // F-5: overview lens → steady-state crush colouring
+        refreshOS();
         vis('os-edges', true); vis('os-heatmap', true); vis('os-nodes', true); vis('os-nodes-lbl', true);
         vis('civ-pins', false);
         map.easeTo({ center:[-79.392, 43.646], zoom:12.9, duration:700 });
-        paint('<div class="ptitle">💵 Economy lens</div>'+
+        paint('<h2 class="ptitle">💵 Economy lens</h2>'+
           '<p class="psub">The crush isn’t just transit — it kills local trade. The same lever recovers it.</p>'+
           '<div id="econ"><p class="hint"><span class="spinner"></span>Scoring local business…</p></div>');
         lensesAt(RELEASE, SHELTER).then(l => {
@@ -470,6 +558,38 @@
     if (bar) bar.style.width = Math.max(2, Math.min(100, ref ? (val/ref*100) : 0)) + '%';
   }
 
+  // F-9: count-up tween for the headline $ number. The FINAL frame is ALWAYS the exact
+  // computed target (we snap to `dK(target)` on the last tick and on supersession), so
+  // a rapid re-drag that cancels an in-flight tween can never leave a stale intermediate
+  // value on screen. Each call cancels the previous tween for that element.
+  const _tweenRAF = new WeakMap();
+  function tweenMoney(el, target) {
+    if (!el) return;
+    const prev = _tweenRAF.get(el);
+    if (prev) cancelAnimationFrame(prev);
+    const to = Number(target || 0);
+    const from = Number(el.dataset.money || 0);
+    const t0 = performance.now(), dur = 420;
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / dur);
+      if (p >= 1) {                       // exact final frame — never an interpolated value
+        el.textContent = dK(to); el.dataset.money = String(to); _tweenRAF.delete(el); return;
+      }
+      const e = 1 - Math.pow(1 - p, 3);   // easeOutCubic
+      el.textContent = dK(from + (to - from) * e);
+      _tweenRAF.set(el, requestAnimationFrame(step));
+    };
+    el.dataset.money = String(to);        // record target up-front so a cancel reads it
+    _tweenRAF.set(el, requestAnimationFrame(step));
+  }
+  // F-4: fill the City combined caption — the additive label + the conservative net
+  // benefit (j_avoided / four-lens-J reduction), each carrying its ADR-0019 definition.
+  function setBenefitLabels(crossDomain, netBenefit) {
+    const cd = document.getElementById('cd-label'), nb = document.getElementById('net-benefit');
+    if (cd) cd.title = benefitTip('cross_domain_benefit');
+    if (nb) { nb.textContent = dK(netBenefit); nb.title = benefitTip('j_avoided'); }
+  }
+
   function setLens(id) {
     if (LENS === id) return;
     LENS = id;
@@ -489,13 +609,17 @@
       const [sim, l] = await Promise.all([ loadSim(r, s), lensesAt(r, s) ]);
       if (seq !== rippleSeq) return;        // a newer drag superseded this one
       if (!l) return;
+      if (l.benefit_definitions) BENEFIT_DEFS = l.benefit_definitions;  // F-4: label source
       if (!BASELINE) BASELINE = await lensesAt(0, 0) || l;
       const tEl = document.getElementById('m-transit'), sEl = document.getElementById('m-safety'),
             bEl = document.getElementById('m-business'), cEl = document.getElementById('combined');
       if (tEl) tEl.textContent = mult2(l.transit.peak_congestion) + '×';
       if (sEl) sEl.textContent = dK(l.safety.cost);
       if (bEl) bEl.textContent = dK(l.business.lost);
-      if (cEl) cEl.textContent = dK(l.cross_domain_benefit);
+      // F-4: headline = cross-domain additive; net benefit = conservative single-J.
+      // F-9: tween to the EXACT target (count-up that always lands on dK(target)).
+      if (cEl) { tweenMoney(cEl, l.cross_domain_benefit); cEl.title = benefitTip('cross_domain_benefit'); }
+      setBenefitLabels(l.cross_domain_benefit, l.combined_benefit);
       setMeter('transit', l.transit.peak_congestion, BASELINE.transit.peak_congestion);
       setMeter('safety', l.safety.cost, BASELINE.safety.cost);
       setMeter('business', l.business.lost, BASELINE.business.lost);
@@ -520,21 +644,31 @@
       // avoided at the optimum (no double-counting), consistent with the live ripple.
       if (!BASELINE) BASELINE = await lensesAt(0, 0);
       const l = await lensesAt(relMin, shelFrac);
+      if (d.benefit_definitions) BENEFIT_DEFS = d.benefit_definitions;  // F-4: label source
       const combined = l ? l.cross_domain_benefit : 0;
+      // F-4: the optimizer's own conservative single-objective headline (= j_avoided).
+      const jAvoided = (d.j_avoided != null) ? d.j_avoided : d.savings;
       // The before/after + grounded insight card.
       const out = document.getElementById('opt-out');
       const card =
         '<div class="insight"><span class="tag '+(d.grounded?'grounded">✓ grounded':'fallback">⚠ template')+'</span><br>'+esc(d.insight)+'</div>'+
         '<div class="ba"><div class="card"><div class="k">Do nothing</div><div class="v bad">'+mult2(d.baseline_peak.congestion)+'×</div><div class="hint">'+esc(d.baseline_peak.label)+'</div></div>'+
         '<div class="card"><div class="k">Best ('+relMin+'m · '+Math.round(shelFrac*100)+'%)</div><div class="v good">'+mult2(d.best_peak.congestion)+'×</div><div class="hint">'+esc(d.best_peak.label)+'</div></div></div>'+
-        '<div class="combined"><div class="k">Combined benefit — one objective, every lens</div><div class="v num">'+dK(combined)+'</div></div>';
+        // F-4: label both benefit framings with their ADR-0019 definitions (tooltips)
+        // so the same intervention no longer shows unexplained dollar figures.
+        '<div class="combined"><div class="k">Combined benefit — one objective, every lens</div>'+
+          '<div class="v num" title="'+benefitTip('cross_domain_benefit')+'">'+dK(combined)+'</div>'+
+          '<div class="optband" style="margin-top:6px"><span title="'+benefitTip('cross_domain_benefit')+'">cross-domain (additive)</span> · '+
+          'net benefit <b class="num" title="'+benefitTip('j_avoided')+'">'+dK(jAvoided)+'</b></div></div>';
       if (out) out.innerHTML = card;
       // Animate the City meters to the optimum (same /lenses source as the ripple).
       if (l && document.getElementById('combined')) {
         document.getElementById('m-transit').textContent = mult2(l.transit.peak_congestion)+'×';
         document.getElementById('m-safety').textContent = dK(l.safety.cost);
         document.getElementById('m-business').textContent = dK(l.business.lost);
-        document.getElementById('combined').textContent = dK(combined);
+        const cEl = document.getElementById('combined');
+        tweenMoney(cEl, combined); cEl.title = benefitTip('cross_domain_benefit');  // F-9: exact final frame
+        setBenefitLabels(combined, jAvoided);
         setMeter('transit', l.transit.peak_congestion, BASELINE.transit.peak_congestion);
         setMeter('safety', l.safety.cost, BASELINE.safety.cost);
         setMeter('business', l.business.lost, BASELINE.business.lost);
@@ -554,13 +688,13 @@
       .map(([k,v]) => '<tr><td>'+k+'</td><td>'+dK(v)+'</td></tr>').join('') +
       '<tr class="total"><td>Total J</td><td>'+dK(cb.total)+'</td></tr>';
   }
-  function resizeTime() { const t = document.getElementById('time'); if (t && SIM) { t.max = SIM.frames.length-1; if (FRAME>t.max) FRAME=0; t.value=FRAME; } }
+  function resizeTime() { const t = document.getElementById('time'); if (t && SIM) { t.max = SIM.frames.length-1; if (FRAME>t.max) FRAME=0; t.value=FRAME; t.setAttribute('aria-valuetext', 'frame ' + FRAME); } }
   function togglePlay() {
     const btn = document.getElementById('play'); if (!SIM) return;
     if (playing) { stopPlay(); return; }
     playing = true; btn.textContent = '⏸ Pause';
     timer = setInterval(() => { FRAME = (FRAME+1) % SIM.frames.length;
-      const t = document.getElementById('time'); if (t) t.value = FRAME; refreshOS();
+      const t = document.getElementById('time'); if (t) { t.value = FRAME; t.setAttribute('aria-valuetext', 'frame ' + FRAME); } refreshOS();
       if (FRAME === SIM.frames.length-1) stopPlay(); }, 120);
   }
   function stopPlay() { playing = false; clearInterval(timer); const b = document.getElementById('play'); if (b) b.textContent = '▶ Play'; }
@@ -585,7 +719,7 @@
     detail.innerHTML = '<div style="font-size:18px;font-weight:800;margin:4px 0">'+esc(d.matched_address||d.address)+'</div>'+
       '<div class="idxrow">'+idx('Food safety', d.risk_safety, d.band_safety)+idx('Construction activity', d.risk_activity, d.band_activity)+'</div>'+
       '<p class="hint">Two independent indices (0–1), never summed (ADR-0014).</p>'+
-      '<h2>Assessment — verify each claim against its source</h2><ul id="claims">'+claims+'</ul>'+
+      '<h3 class="panel-h">Assessment — verify each claim against its source</h3><ul id="claims">'+claims+'</ul>'+
       '<p class="hint">'+((d.evidence||[]).length)+' linked source records · the model phrases these numbers, it cannot invent them.</p>';
   }
   panel.addEventListener('click', e => { const b = e.target.closest('.verify'); if (!b) return;
@@ -595,6 +729,18 @@
     const d = document.getElementById('detail'); if (d) d.innerHTML = '<p class="hint">Pick a pin or address for its grounded risk read.</p>'; } });
 
   // ---- boot → load everything → reveal City ----
+  // F-11: while the canvas is still loading (status "booting…"), key/lens input was
+  // silently dropped. We now QUEUE the last lens intent and give live feedback, then
+  // apply it the instant boot finishes — no input is silently ignored.
+  let BOOTED = false, PENDING_LENS = null;
+  const LENS_KEYS = { '1':'city', '2':'safety', '3':'flow', '4':'economy' };
+  addEventListener('keydown', e => {
+    if (BOOTED) return;                       // once booted the normal handlers take over
+    const id = LENS_KEYS[e.key];
+    if (id) { PENDING_LENS = id; setStatus('booting… <b>'+id+'</b> lens queued'); e.preventDefault(); }
+    else if (e.key === 'Enter') { setStatus('booting… one moment — loading the city'); e.preventDefault(); }
+  }, true);
+
   async function boot() {
     try {
       const [scen, sim, addrs] = await Promise.all([
@@ -607,8 +753,9 @@
       document.getElementById('scenario-tag').textContent =
         evs.length + ' events · ' + Math.round(SCEN.meta.crowd_size).toLocaleString() + ' people · offline on one box';
       drawLayers();
-      setLens('city');
-    } catch (err) { setStatus('<span style="color:var(--risk-high)">load failed: '+esc(err.message)+'</span>'); }
+      BOOTED = true;
+      setLens(PENDING_LENS && LENSES[PENDING_LENS] ? PENDING_LENS : 'city');  // honour queued intent
+    } catch (err) { BOOTED = true; setStatus('<span style="color:var(--risk-high)">load failed: '+esc(err.message)+'</span>'); }
   }
 
   map.on('load', async () => {

@@ -227,3 +227,54 @@ def test_grounded_tooltip_clarifies_scope(page: str) -> None:
     """The ✓ grounded tag carries a tooltip narrowing it to 'verified against the
     simulation run', not end-to-end optimizer soundness."""
     assert "checked against the simulation run" in page
+
+
+# ---- 5. Unified shell (os.html, served at "/") — offline + a11y -----------
+
+
+@pytest.fixture(scope="module")
+def shell() -> str:
+    """The unified 'Urban OS' shell served at ``/`` (os.html)."""
+    r = client.get("/")
+    assert r.status_code == 200
+    return r.text
+
+
+def test_shell_has_no_external_hosts(shell: str) -> None:
+    """The shell must stay 100% offline, exactly like the classic page."""
+    low = shell.lower()
+    hits = [s for s in _FORBIDDEN_SUBSTRINGS if s in low]
+    assert not hits, f"offline shell references forbidden external host(s): {hits}"
+
+
+def test_shell_no_external_http_urls(shell: str) -> None:
+    """No off-origin absolute URL may appear in the shell (same rule as classic)."""
+    scrubbed = shell.replace("${location.origin}", "")
+    urls = re.findall(r"https?://[A-Za-z0-9.\-]+", scrubbed)
+    allowed_hosts = {"https://www.openstreetmap.org", "http://www.openstreetmap.org"}
+    bad = [u for u in urls if u not in allowed_hosts]
+    assert not bad, f"offline shell must not reference external URLs, found: {bad}"
+
+
+def test_shell_has_semantic_h1(shell: str) -> None:
+    """F-10b: the shell must expose a real top-level heading (was a styling-only span)."""
+    assert "<h1" in shell
+
+
+def test_shell_has_skip_link(shell: str) -> None:
+    """F-10c: a skip link to the controls panel for keyboard users."""
+    assert 'class="skip-link"' in shell
+    assert 'href="#panel"' in shell
+
+
+def test_shell_time_scrubber_is_labelled(shell: str) -> None:
+    """F-10a: the Flow time scrubber (#time) must carry an aria-label."""
+    assert 'id="time"' in shell
+    assert 'aria-label="Simulation time frame"' in shell
+
+
+def test_shell_labels_benefit_numbers(shell: str) -> None:
+    """F-4: the shell consumes the ADR-0019 definitions + both benefit framings."""
+    assert "benefit_definitions" in shell
+    assert "cross_domain_benefit" in shell
+    assert "net benefit" in shell
