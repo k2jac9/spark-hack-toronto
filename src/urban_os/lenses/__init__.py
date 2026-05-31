@@ -22,6 +22,7 @@ from __future__ import annotations
 from .business_flow import BusinessFlow
 from .economic import EconomicLens
 from .event_surge import EventSurge
+from .safety import SafetyLens
 from .weather import WeatherLens
 
-__all__ = ["EventSurge", "EconomicLens", "WeatherLens", "BusinessFlow"]
+__all__ = ["EventSurge", "EconomicLens", "WeatherLens", "BusinessFlow", "SafetyLens"]
