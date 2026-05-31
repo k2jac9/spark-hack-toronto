@@ -88,3 +88,49 @@ def downtown_scenario(crowd_size: float = 45000.0) -> Scenario:
         horizon=120,
         dt=1.0,
     )
+
+
+def _synthetic_safety_by_node(substrate) -> dict[str, float]:
+    """Deterministic placeholder civic-safety overlay (no civic data needed):
+    denser interchanges carry more street-level safety exposure. Bounded 0..0.6.
+    Keeps Urban-OS standalone and tests offline when the civic graph is absent."""
+    import numpy as np
+
+    cap = substrate.capacity.astype(float)
+    base = np.where(~substrate.is_sink, cap, 0.0)
+    peak = float(base.max())
+    vals = (base / peak) * 0.6 if peak > 0 else base
+    return {nid: float(vals[i]) for i, nid in enumerate(substrate.ids)}
+
+
+def civic_safety_by_node(substrate, *, radius_deg: float = 0.0045) -> dict[str, float]:
+    """Map each substrate node → the civic-safety risk of its surrounding addresses
+    (the civic_analyst graph), proximity-weighted. This is the **real fusion** that
+    makes ``SafetyLens`` literal: address-level compliance-safety risk → a node
+    field on the kernel substrate.
+
+    Falls back to a deterministic synthetic overlay if the civic graph isn't
+    importable/loaded (so Urban-OS stays standalone and tests run offline)."""
+    import numpy as np
+
+    try:
+        from civic_analyst import mcp_server as civ
+
+        civ.load()
+        addrs = [a for a in civ.top_risk(limit=2000) if a.get("lat") is not None]
+        if not addrs:
+            raise RuntimeError("no civic addresses loaded")
+        out: dict[str, float] = {}
+        for i, nid in enumerate(substrate.ids):
+            la, lo = float(substrate.lat[i]), float(substrate.lng[i])
+            num = den = 0.0
+            for a in addrs:
+                dlat = a["lat"] - la
+                dlng = (a["lng"] - lo) * np.cos(np.radians(la))
+                w = float(np.exp(-(dlat * dlat + dlng * dlng) / (radius_deg * radius_deg)))
+                num += w * float(a.get("risk_safety", 0.0))
+                den += w
+            out[nid] = (num / den) if den > 0 else 0.0
+        return out
+    except Exception:
+        return _synthetic_safety_by_node(substrate)

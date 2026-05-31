@@ -15,18 +15,22 @@ import argparse
 import json
 import sys
 
-from .adapters import downtown_scenario
+from .adapters import civic_safety_by_node, downtown_scenario
 from .kernel import Simulation
-from .lenses import BusinessFlow, EconomicLens, EventSurge
+from .lenses import BusinessFlow, EconomicLens, EventSurge, SafetyLens
 from .narrate import build_insight
 from .optimize import objective, optimize
 
 
-def _lenses(sc, *, business: bool = False):
+def _lenses(sc, *, business: bool = False, safety: bool = False):
     ls = [
         EventSurge(sc.venue_id, sc.crowd_size, event_end=sc.event_end),
         EconomicLens(),
     ]
+    if safety:
+        # The civic risk app, made literal: lift address-level safety risk onto the
+        # substrate and price crowd crush through the least-safe districts.
+        ls.append(SafetyLens(civic_safety_by_node(sc.substrate)))
     if business:
         # Sports-Urban-Intelligence: price the local trade a crush destroys so the
         # release lever is optimized for transit + safety + economics together.
@@ -46,10 +50,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true", help="emit JSON instead of a briefing")
     p.add_argument("--business", action="store_true",
                    help="add the Sports/Business-Flow lens (local trade lost to the crush)")
+    p.add_argument("--safety", action="store_true",
+                   help="add the Safety lens (civic_analyst address risk → node field)")
     args = p.parse_args(argv)
 
     sc = downtown_scenario(**({"crowd_size": args.crowd} if args.crowd else {}))
-    lenses = _lenses(sc, business=args.business)
+    lenses = _lenses(sc, business=args.business, safety=args.safety)
 
     if args.release is not None:
         # Single deterministic run at a fixed lever — no search.
@@ -72,6 +78,13 @@ def main(argv: list[str] | None = None) -> int:
         biz = {"baseline_lost": base_lost, "best_lost": best_lost,
                "recovered": base_lost - best_lost}
 
+    saf = None
+    if args.safety:
+        sl = next(ln for ln in lenses if ln.name == "safety")
+        base_c = float(sl.cost(opt.baseline_result))
+        best_c = float(sl.cost(opt.best_result))
+        saf = {"baseline_cost": base_c, "best_cost": best_c, "reduced": base_c - best_c}
+
     if args.json:
         print(json.dumps({
             "insight": insight.text,
@@ -83,6 +96,7 @@ def main(argv: list[str] | None = None) -> int:
             "best_params": opt.best_params,
             "baseline_peak": peak,
             "business": biz,
+            "safety": saf,
         }, indent=2))
         return 0
 
@@ -94,6 +108,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  do-nothing cost J: ${opt.baseline_J:,.0f}")
     print(f"  best intervention: release_minutes={opt.best_params.get('release_minutes')} "
           f"→ J ${opt.best_J:,.0f}  (saves ${opt.savings:,.0f})")
+    if saf is not None:
+        print(f"  public safety: civic risk overlaid on the substrate; crush through the "
+              f"least-safe districts costs ${saf['baseline_cost']:,.0f}, "
+              f"cut to ${saf['best_cost']:,.0f} by the optimized release.")
     if biz is not None:
         print(f"  business: a crush destroys ${biz['baseline_lost']:,.0f} in local trade; "
               f"the optimized release recovers ${biz['recovered']:,.0f}.")
