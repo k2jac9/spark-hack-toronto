@@ -109,6 +109,10 @@ class Simulation:
             state.t = t
             state.step = step
 
+            # Reset the per-step transport capacity multiplier; lenses that tax
+            # throughput (e.g. rain) multiply into it during source() (ADR-0021).
+            state.edge_cap_mult[:] = 1.0
+
             # 1. sources — lenses inject forcing.
             for lens in self.lenses:
                 lens.source(state, t)
@@ -116,9 +120,20 @@ class Simulation:
             # 2. integrate — move load on the graph, then optional noise.
             Operators.transport(state, dt=self.dt)
             if self.noise > 0:
+                # Conservative jitter (ADR-0021): the perturbation is made zero-sum
+                # (subtract its mean) so it REDISTRIBUTES load rather than creating or
+                # destroying people, and after the non-negativity clip we rescale to
+                # restore the exact pre-noise total. People-conservation (ADR-0002)
+                # therefore holds under noise, not only on the noise==0 path.
                 load = state.fields["load"]
-                load += rng.normal(0.0, self.noise, size=load.shape) * np.sqrt(load + 1.0)
-                np.clip(load, 0.0, None, out=load)
+                total_before = float(load.sum())
+                eps = rng.normal(0.0, self.noise, size=load.shape) * np.sqrt(load + 1.0)
+                eps -= eps.mean()                       # zero-sum: never injects mass
+                load += eps
+                np.clip(load, 0.0, None, out=load)      # keep load physical (≥ 0)
+                total_after = float(load.sum())
+                if total_after > 0.0:                   # correct the clip's tiny leak
+                    load *= total_before / total_after
 
             # 3. couple — kernel maintains congestion; lenses derive the rest.
             state.fields["congestion"] = _safe_div(state.fields["load"], sub.capacity)

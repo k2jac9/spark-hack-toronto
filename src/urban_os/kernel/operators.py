@@ -81,11 +81,17 @@ class Operators:
         loop hold references to the same field objects.
         """
         sub = state.substrate
+        # Effective link capacity = baked dry capacity × the per-step multiplier a
+        # lens may have applied (e.g. WeatherLens' rain tax). Default multiplier is
+        # all-ones, so this is a no-op unless a lens taxed throughput this step. The
+        # substrate's ``edge_cap`` itself is never mutated (ADR-0021).
+        mult = getattr(state, "edge_cap_mult", None)
+        edge_cap = sub.edge_cap if mult is None else sub.edge_cap * mult
         out_load, arrived_delta = accel.transport_step(
             load=state.fields["load"],
             edge_src=sub.edge_src,
             edge_dst=sub.edge_dst,
-            edge_cap=sub.edge_cap,
+            edge_cap=edge_cap,
             dist_to_sink=sub.dist_to_sink,
             is_sink=sub.is_sink,
             capacity=sub.capacity,
