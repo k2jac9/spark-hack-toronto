@@ -402,5 +402,6 @@ def observed_counts_by_node(
         return _observed_counts_by_node(
             substrate, mode=mode, radius_deg=radius_deg, provider=provider
         )
-    except Exception:
+    except Exception as exc:
+        _log.warning("observed-count fusion failed, using synthetic fallback: %s", exc)
         return _synthetic_counts_by_node(substrate)
