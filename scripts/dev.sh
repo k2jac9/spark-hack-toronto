@@ -51,7 +51,9 @@ ollama_up() {
 }
 
 ensure_model() {
-  if ! "$OLLAMA_BIN" list 2>/dev/null | grep -q "${LLM_MODEL%%:*}"; then
+  # Match the full model name (repo:tag) as a fixed string — stripping the tag would
+  # treat a different tag of the same repo as "already pulled" and skip the pull.
+  if ! "$OLLAMA_BIN" list 2>/dev/null | grep -qF "$LLM_MODEL"; then
     log "pulling $LLM_MODEL (one-time) ..."; "$OLLAMA_BIN" pull "$LLM_MODEL"
   fi
   # Pin the model resident so dev iterations never pay the cold-load (first cold call
