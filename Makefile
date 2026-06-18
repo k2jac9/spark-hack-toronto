@@ -1,18 +1,27 @@
-.PHONY: install install-hooks data serve cli test demo demo-public funnel-off funnel-off-all \
+.PHONY: install install-linux install-hooks data serve cli test demo demo-public funnel-off funnel-off-all \
         demo-cli demo-data urbanos urbanos-cli urbanos-accel urbanos-bench screenshot \
-        gpu-install gpu-check llm-check
+        gpu-install gpu-check llm-check dev dev-down dev-status
 
 # demo  -> real downtown-Toronto slice (demo_data/), pins land on the offline map.
 # demo-cli/tests -> synthetic, deterministic fixtures/.
 DEMO_DATA ?= demo_data
 FIXTURES ?= fixtures
 
-# Prefer the project venv if present, so `make test` works whether or not the
-# venv is activated in the current shell. Override with `make PYTHON=...`.
-PYTHON ?= $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo python)
+# Prefer a project venv if present, so `make test` works whether or not the venv
+# is activated in the current shell. Order: WSL-native .venv-linux (the checked-in
+# .venv may be a Windows venv that WSL can't run), then POSIX .venv, then python.
+# Override with `make PYTHON=...`.
+PYTHON ?= $(shell [ -x .venv-linux/bin/python ] && echo .venv-linux/bin/python || ([ -x .venv/bin/python ] && echo .venv/bin/python || echo python))
 
 install:
 	$(PYTHON) -m pip install -r requirements.txt
+
+# Build a WSL/Linux venv (.venv-linux) from the pinned lock with uv. Use this on
+# WSL where the checked-in .venv is a Windows venv (Scripts/, not bin/) and can't run.
+# Needs `uv` (https://docs.astral.sh/uv/). After this, `make test` / `make dev` just work.
+install-linux:
+	uv venv .venv-linux --python 3.12
+	uv pip install --python .venv-linux -r requirements.lock
 
 # Install the optional RAPIDS GPU accelerators — ON THE BOX ONLY (aarch64 + CUDA).
 # The app falls back to CPU without these, so dev/CI never need them.
@@ -129,3 +138,17 @@ urbanos-bench:
 #   make screenshot URL=http://localhost:8001/ OUT=/tmp/map.png
 screenshot:
 	$(PYTHON) scripts/screenshot_map.py "$(URL)" "$(OUT)"
+
+# ---- Local dev stack (WSL/Linux): live Ollama narrator + BOTH apps in background ----
+# `make dev` brings up ollama (if installed; pulls + pins the dev model) and serves
+# civic_analyst (:8000) + urban_os (:8001) in the background, then prints the URLs.
+# Degrades gracefully with no ollama (deterministic narrator). Stop with `make dev-down`.
+# Override the model/ports via env: LLM_MODEL=... CIVIC_PORT=... URBAN_PORT=...
+dev:
+	DEV_PY=$(PYTHON) bash scripts/dev.sh up
+
+dev-down:
+	bash scripts/dev.sh down
+
+dev-status:
+	bash scripts/dev.sh status
