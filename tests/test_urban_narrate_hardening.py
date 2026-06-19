@@ -295,3 +295,98 @@ def test_nums_canonicalizes_int_float_and_padding() -> None:
     assert _nums("2.5 vs 25") == {"2.5", "25"}
     assert _nums("no numbers here") == set()
     assert _nums("") == set()
+
+
+def test_nums_treats_comma_grouped_thousands_as_one_value() -> None:
+    """A thousands-grouped integer tokenizes to the single value it denotes — so
+    accepting ``$394,000`` never requires whitelisting a spurious ``0`` group, and a
+    stray ``0`` (substituted for a real figure) is still caught."""
+    assert _nums("$394,000") == {"394000"}
+    assert _nums("1,234,567 riders") == {"1234567"}
+    assert "0" not in _nums("$394,000")
+    # mixed: a grouped amount alongside a plain decimal both survive intact
+    assert _nums("$394,000 at 2.5x") == {"394000", "2.5"}
+
+
+# --- comma-grouped / full-thousands rendering of $k figures (laptop llama3.2:3b)
+# A model that doesn't speak the "$Nk" shorthand writes the SAME evidenced figure in
+# full ("$394,000" or "394000"). That is an alternate rendering of an already-
+# whitelisted value, NOT a new number, so the guard must accept it — without loosening
+# grounding (a non-evidenced amount stays rejected). See narrate._thousands_forms.
+
+
+def test_full_dollar_form_of_savings_k_is_grounded() -> None:
+    """(a) ``$394,000``-style (and bare ``394000``) is grounded when 394 == savings_k.
+
+    Uses the real ``savings_k`` from the run, so it tracks whatever the demo value is.
+    """
+    opt, sc = _opt()
+    f = build_insight(opt, event_end=sc.event_end, llm=_Boom()).figures
+    s = f["savings_k"]
+    assert s > 0  # a meaningful $k figure to render in full
+    comma = (
+        f"{f['station']} peaks at {f['base_mult']}x capacity; a "
+        f"{f['release_min']}-minute release delivers a net benefit of ${s * 1000:,}."
+    )  # e.g. "$394,000"
+    bare = (
+        f"{f['station']} peaks at {f['base_mult']}x capacity; a "
+        f"{f['release_min']}-minute release delivers a net benefit of ${s * 1000}."
+    )  # e.g. "$394000"
+    # Direct predicate: both full forms trace to the evidenced $k figure.
+    assert is_grounded(comma, f) is True
+    assert is_grounded(bare, f) is True
+    # And through the full narrator: a clean full-form LLM line is accepted (grounded).
+    ins = build_insight(opt, event_end=sc.event_end, llm=_LLM(comma))
+    assert ins.grounded is True
+    assert ins.text == comma
+
+
+def test_non_evidenced_full_amount_is_still_rejected() -> None:
+    """(b) A full dollar amount whose $k value is NOT a figure stays ungrounded — the
+    comma-thousands acceptance does not loosen grounding."""
+    opt, sc = _opt()
+    f = build_insight(opt, event_end=sc.event_end, llm=_Boom()).figures
+    # Choose a $k value guaranteed to differ from every numeric figure in the run, so
+    # neither "$<bogus>,000" nor "<bogus>000" can match a whitelisted token.
+    figure_vals = {
+        int(round(v))
+        for v in f.values()
+        if isinstance(v, (int, float)) and not isinstance(v, bool)
+    }
+    bogus_k = 500
+    while bogus_k in figure_vals:
+        bogus_k += 1
+    comma = f"{f['station']} saves ${bogus_k * 1000:,}."   # e.g. "$500,000"
+    bare = f"{f['station']} saves ${bogus_k * 1000}."       # e.g. "$500000"
+    assert is_grounded(comma, f) is False
+    assert is_grounded(bare, f) is False
+    # The narrator must fall back rather than emit the bogus amount.
+    ins = build_insight(opt, event_end=sc.event_end, llm=_LLM(comma))
+    assert ins.grounded is False
+    assert str(bogus_k) not in ins.text
+
+
+def test_short_and_full_forms_agree_existing_groundedness_unchanged() -> None:
+    """(c) The original ``$<V>k`` short form is STILL grounded (no regression), and it
+    agrees with the new full form: both representations of the same $k figure are
+    accepted, while the deterministic fallback remains grounded-by-construction."""
+    opt, sc = _opt()
+    f = build_insight(opt, event_end=sc.event_end, llm=_Boom()).figures
+    s = f["savings_k"]
+    assert s > 0
+    short = (
+        f"{f['station']} peaks at {f['base_mult']}x capacity; a "
+        f"{f['release_min']}-minute release saves ${s}k."
+    )
+    full = (
+        f"{f['station']} peaks at {f['base_mult']}x capacity; a "
+        f"{f['release_min']}-minute release saves ${s * 1000:,}."
+    )
+    # The short form was already grounded before this change — still is.
+    assert is_grounded(short, f) is True
+    # The new full form is grounded too: same value, alternate rendering.
+    assert is_grounded(full, f) is True
+    # Existing fallback invariant unchanged: the deterministic sentence stays grounded.
+    fallback = build_insight(opt, event_end=sc.event_end, llm=_Boom())
+    assert fallback.grounded is False
+    assert is_grounded(fallback.text, fallback.figures) is True

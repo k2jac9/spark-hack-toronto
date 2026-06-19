@@ -41,10 +41,14 @@ _SYSTEM = (
     "call it a commuter-delay saving. Output the single sentence and nothing else."
 )
 
-# A "number" the guard reasons about: an integer or a decimal, optionally signed.
-# We keep decimals intact (``2.5``) rather than splitting them into ``{2, 5}`` so a
-# figure like 2.5x can never be confused with the unrelated integer 25.
-_NUM_RE = re.compile(r"\d+(?:\.\d+)?")
+# A "number" the guard reasons about: a comma-grouped integer (``394,000``), or a
+# plain integer / decimal, optionally signed. We keep decimals intact (``2.5``)
+# rather than splitting them into ``{2, 5}`` so a figure like 2.5x can never be
+# confused with the unrelated integer 25 — and we treat a thousands-grouped integer
+# as the single value it denotes (``394,000`` -> 394000), NOT as ``{394, 0}``.
+# Splitting on the comma would force the spurious ``0`` group into the whitelist,
+# which would let a stray ``0`` substituted for a real figure pass as grounded.
+_NUM_RE = re.compile(r"\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?")
 
 
 def _nums(s: str) -> set[str]:
@@ -54,7 +58,7 @@ def _nums(s: str) -> set[str]:
     out: set[str] = set()
     for tok in _NUM_RE.findall(s or ""):
         try:
-            val = float(tok)
+            val = float(tok.replace(",", ""))  # drop thousands separators: 394,000 -> 394000
         except ValueError:  # pragma: no cover - regex guarantees parseability
             continue
         out.add(_canon(val))
@@ -146,18 +150,53 @@ def _deterministic(f: dict) -> str:
     )
 
 
+# Figures whose value is denominated in *thousands of dollars* (``$k``). The
+# sentence prints these as ``$<V>k`` (e.g. savings_k=394 -> "$394k"), but a model
+# that doesn't speak the ``$k`` shorthand may instead write the SAME value in full
+# (``$394,000`` or ``394000``). Those are not new numbers — they are alternate
+# renderings of an already-evidenced figure — so the guard accepts them too (see
+# ``_thousands_forms``). Detected by the documented ``_k`` key suffix.
+def _is_thousands_key(key: object) -> bool:
+    return isinstance(key, str) and key.endswith("_k")
+
+
+def _thousands_forms(value: float) -> set[str]:
+    """Canonical token for the full-dollar rendering of a ``$k`` figure value ``V``.
+
+    A ``$k`` figure is a dollar amount in thousands, so its full form is ``V*1000``.
+    A model that doesn't use the ``$k`` shorthand may write that same amount in full,
+    grouped (``$394,000``) or un-grouped (``394000``). The comma-aware tokenizer maps
+    BOTH renderings to the one value ``V*1000``, so whitelisting that single token
+    accepts both — and ONLY that exact value. No fuzz, range, or rounding tolerance;
+    and, unlike splitting on the comma, no spurious ``0`` group enters the whitelist,
+    so a stray ``0`` substituted for a real figure is still rejected. A non-evidenced
+    amount stays rejected: ``$500,000`` -> ``{"500000"}``, not a figure, so flagged."""
+    if not math.isfinite(value):
+        return set()
+    full = int(round(value)) * 1000
+    return {_canon(float(full))}
+
+
 def _whitelist(f: dict) -> set[str]:
     """Every numeric token the insight is allowed to contain: the canonical form
     of each figure value. This is the single source of truth — the deterministic
     sentence is built only from these same values, so it is grounded by
-    construction and the LLM sentence is held to the identical set."""
+    construction and the LLM sentence is held to the identical set.
+
+    For ``$k``-denominated figures (the ``_k`` keys) we ALSO whitelist the full-dollar
+    renderings of the SAME value (``$394k`` ⇔ ``$394,000`` ⇔ ``394000``) so a model
+    that writes thousands in full is not mistaken for hallucinating — see
+    ``_thousands_forms``. This adds no fuzz/range/rounding tolerance; only the exact
+    alternate representations of an already-evidenced number become allowed."""
     allowed: set[str] = set()
-    for v in f.values():
+    for k, v in f.items():
         if isinstance(v, bool):  # bool is an int subclass; never a figure number
             continue
         if isinstance(v, (int, float)):
             if math.isfinite(float(v)):
                 allowed.add(_canon(float(v)))
+                if _is_thousands_key(k):
+                    allowed |= _thousands_forms(float(v))
     return allowed
 
 
