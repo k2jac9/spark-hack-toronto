@@ -146,18 +146,64 @@ def _deterministic(f: dict) -> str:
     )
 
 
+# Figures whose value is denominated in *thousands of dollars* (``$k``). The
+# sentence prints these as ``$<V>k`` (e.g. savings_k=394 -> "$394k"), but a model
+# that doesn't speak the ``$k`` shorthand may instead write the SAME value in full
+# (``$394,000`` or ``394000``). Those are not new numbers — they are alternate
+# renderings of an already-evidenced figure — so the guard accepts them too (see
+# ``_thousands_forms``). Detected by the documented ``_k`` key suffix.
+def _is_thousands_key(key: object) -> bool:
+    return isinstance(key, str) and key.endswith("_k")
+
+
+def _thousands_forms(value: float) -> set[str]:
+    """Canonical tokens for the full-dollar rendering of a ``$k`` figure value ``V``.
+
+    A ``$k`` figure is the dollar amount in thousands, so its full form is
+    ``V*1000``. A model may write that full amount two ways and the guard must
+    accept BOTH — and ONLY — these exact representations of the same value:
+
+    * un-grouped (``394000``)        -> ``_nums`` yields ``{"394000"}``
+    * comma-grouped (``$394,000``)   -> the thousands separator is NOT part of a
+      numeric token, so ``_nums`` SPLITS it into 3-digit groups
+      (``394`` and ``000`` -> ``{"394", "0"}``).
+
+    We derive the comma-grouped tokens straight from ``f"{full:,}"`` rather than
+    hard-coding them, so the set is exactly what ``_nums`` would extract from the
+    grouped string — no fuzz, no rounding, no range tolerance. Because a ``$k``
+    figure is a whole-thousands value, ``V*1000`` is a multiple of 1000, so the
+    only token this adds beyond the already-whitelisted ``V`` is ``0`` (each
+    ``,000`` group) plus the un-grouped ``V*1000``. A NON-evidenced amount is still
+    rejected: its leading group is not a figure (e.g. ``$500,000`` -> ``{"500",
+    "0"}``; ``500`` is not whitelisted, so the sentence is still flagged)."""
+    if not math.isfinite(value):
+        return set()
+    full = int(round(value)) * 1000
+    forms = {_canon(float(full))}          # un-grouped: "394000"
+    forms |= _nums(f"{full:,}")            # comma-grouped tokens: {"394", "0"}
+    return forms
+
+
 def _whitelist(f: dict) -> set[str]:
     """Every numeric token the insight is allowed to contain: the canonical form
     of each figure value. This is the single source of truth — the deterministic
     sentence is built only from these same values, so it is grounded by
-    construction and the LLM sentence is held to the identical set."""
+    construction and the LLM sentence is held to the identical set.
+
+    For ``$k``-denominated figures (the ``_k`` keys) we ALSO whitelist the full-dollar
+    renderings of the SAME value (``$394k`` ⇔ ``$394,000`` ⇔ ``394000``) so a model
+    that writes thousands in full is not mistaken for hallucinating — see
+    ``_thousands_forms``. This adds no fuzz/range/rounding tolerance; only the exact
+    alternate representations of an already-evidenced number become allowed."""
     allowed: set[str] = set()
-    for v in f.values():
+    for k, v in f.items():
         if isinstance(v, bool):  # bool is an int subclass; never a figure number
             continue
         if isinstance(v, (int, float)):
             if math.isfinite(float(v)):
                 allowed.add(_canon(float(v)))
+                if _is_thousands_key(k):
+                    allowed |= _thousands_forms(float(v))
     return allowed
 
 
