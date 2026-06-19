@@ -1,6 +1,6 @@
 .PHONY: install install-linux install-hooks data serve cli test demo demo-public funnel-off funnel-off-all \
         demo-cli demo-data urbanos urbanos-cli urbanos-accel urbanos-bench screenshot \
-        gpu-install gpu-check llm-check dev dev-down dev-status
+        gpu-install gpu-check gpu-check-wsl llm-check dev dev-down dev-status
 
 # demo  -> real downtown-Toronto slice (demo_data/), pins land on the offline map.
 # demo-cli/tests -> synthetic, deterministic fixtures/.
@@ -32,6 +32,18 @@ gpu-install:
 # box with gpu-install done, expect "cugraph" / "cudf-polars"; elsewhere CPU fallback.
 gpu-check:
 	URBANOS_GPU_GRAPH=1 URBANOS_GPU_DF=1 PYTHONPATH=src $(PYTHON) scripts/gpu_check.py
+
+# Re-runnable one-shot that proves the GPU seams (cugraph + cudf-polars) GENUINELY
+# run on a consumer NVIDIA GPU in WSL-native ext4 (proven on an RTX 2060). It applies
+# the two non-obvious fixes (cudart-headers 12.9.* pin + LD_LIBRARY_PATH from the venv's
+# native-lib dirs) then runs scripts/gpu_check.py. Run from Windows: shells into WSL and
+# uses the ext4 runtime clone at ~/spark-hack-toronto (override WSL_REPO / WSL_DISTRO).
+# Expects "GPU paths active: {'graph': 'cugraph', 'ingest': 'cudf-polars'}". The env must
+# already exist (make install-linux + RAPIDS accelerators — see the script header).
+WSL_DISTRO ?= Ubuntu-24.04
+WSL_REPO   ?= ~/spark-hack-toronto
+gpu-check-wsl:
+	wsl.exe -d $(WSL_DISTRO) -- bash -lc 'cd $(WSL_REPO) && ./scripts/gpu_check_wsl.sh'
 
 # Prove which LLM runtime serves the narrator (ADR-0027). On the box with the model
 # behind trtllm-serve + LLM_RUNTIME=tensorrt-llm, expect "tensorrt-llm" + a tok/s
