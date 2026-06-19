@@ -1,0 +1,4 @@
+# Shell scripts must keep LF endings so they run under bash/WSL on every checkout.
+# (Without this, autocrlf=true rewrites them to CRLF on Windows, and a trailing \r
+# breaks e.g. `exit 3` -> wrong exit status. Git already stores these blobs as LF.)
+*.sh text eol=lf
