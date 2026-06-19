@@ -297,6 +297,17 @@ def test_nums_canonicalizes_int_float_and_padding() -> None:
     assert _nums("") == set()
 
 
+def test_nums_treats_comma_grouped_thousands_as_one_value() -> None:
+    """A thousands-grouped integer tokenizes to the single value it denotes — so
+    accepting ``$394,000`` never requires whitelisting a spurious ``0`` group, and a
+    stray ``0`` (substituted for a real figure) is still caught."""
+    assert _nums("$394,000") == {"394000"}
+    assert _nums("1,234,567 riders") == {"1234567"}
+    assert "0" not in _nums("$394,000")
+    # mixed: a grouped amount alongside a plain decimal both survive intact
+    assert _nums("$394,000 at 2.5x") == {"394000", "2.5"}
+
+
 # --- comma-grouped / full-thousands rendering of $k figures (laptop llama3.2:3b)
 # A model that doesn't speak the "$Nk" shorthand writes the SAME evidenced figure in
 # full ("$394,000" or "394000"). That is an alternate rendering of an already-

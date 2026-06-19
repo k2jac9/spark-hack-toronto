@@ -41,10 +41,14 @@ _SYSTEM = (
     "call it a commuter-delay saving. Output the single sentence and nothing else."
 )
 
-# A "number" the guard reasons about: an integer or a decimal, optionally signed.
-# We keep decimals intact (``2.5``) rather than splitting them into ``{2, 5}`` so a
-# figure like 2.5x can never be confused with the unrelated integer 25.
-_NUM_RE = re.compile(r"\d+(?:\.\d+)?")
+# A "number" the guard reasons about: a comma-grouped integer (``394,000``), or a
+# plain integer / decimal, optionally signed. We keep decimals intact (``2.5``)
+# rather than splitting them into ``{2, 5}`` so a figure like 2.5x can never be
+# confused with the unrelated integer 25 — and we treat a thousands-grouped integer
+# as the single value it denotes (``394,000`` -> 394000), NOT as ``{394, 0}``.
+# Splitting on the comma would force the spurious ``0`` group into the whitelist,
+# which would let a stray ``0`` substituted for a real figure pass as grounded.
+_NUM_RE = re.compile(r"\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?")
 
 
 def _nums(s: str) -> set[str]:
@@ -54,7 +58,7 @@ def _nums(s: str) -> set[str]:
     out: set[str] = set()
     for tok in _NUM_RE.findall(s or ""):
         try:
-            val = float(tok)
+            val = float(tok.replace(",", ""))  # drop thousands separators: 394,000 -> 394000
         except ValueError:  # pragma: no cover - regex guarantees parseability
             continue
         out.add(_canon(val))
@@ -157,31 +161,20 @@ def _is_thousands_key(key: object) -> bool:
 
 
 def _thousands_forms(value: float) -> set[str]:
-    """Canonical tokens for the full-dollar rendering of a ``$k`` figure value ``V``.
+    """Canonical token for the full-dollar rendering of a ``$k`` figure value ``V``.
 
-    A ``$k`` figure is the dollar amount in thousands, so its full form is
-    ``V*1000``. A model may write that full amount two ways and the guard must
-    accept BOTH — and ONLY — these exact representations of the same value:
-
-    * un-grouped (``394000``)        -> ``_nums`` yields ``{"394000"}``
-    * comma-grouped (``$394,000``)   -> the thousands separator is NOT part of a
-      numeric token, so ``_nums`` SPLITS it into 3-digit groups
-      (``394`` and ``000`` -> ``{"394", "0"}``).
-
-    We derive the comma-grouped tokens straight from ``f"{full:,}"`` rather than
-    hard-coding them, so the set is exactly what ``_nums`` would extract from the
-    grouped string — no fuzz, no rounding, no range tolerance. Because a ``$k``
-    figure is a whole-thousands value, ``V*1000`` is a multiple of 1000, so the
-    only token this adds beyond the already-whitelisted ``V`` is ``0`` (each
-    ``,000`` group) plus the un-grouped ``V*1000``. A NON-evidenced amount is still
-    rejected: its leading group is not a figure (e.g. ``$500,000`` -> ``{"500",
-    "0"}``; ``500`` is not whitelisted, so the sentence is still flagged)."""
+    A ``$k`` figure is a dollar amount in thousands, so its full form is ``V*1000``.
+    A model that doesn't use the ``$k`` shorthand may write that same amount in full,
+    grouped (``$394,000``) or un-grouped (``394000``). The comma-aware tokenizer maps
+    BOTH renderings to the one value ``V*1000``, so whitelisting that single token
+    accepts both — and ONLY that exact value. No fuzz, range, or rounding tolerance;
+    and, unlike splitting on the comma, no spurious ``0`` group enters the whitelist,
+    so a stray ``0`` substituted for a real figure is still rejected. A non-evidenced
+    amount stays rejected: ``$500,000`` -> ``{"500000"}``, not a figure, so flagged."""
     if not math.isfinite(value):
         return set()
     full = int(round(value)) * 1000
-    forms = {_canon(float(full))}          # un-grouped: "394000"
-    forms |= _nums(f"{full:,}")            # comma-grouped tokens: {"394", "0"}
-    return forms
+    return {_canon(float(full))}
 
 
 def _whitelist(f: dict) -> set[str]:
