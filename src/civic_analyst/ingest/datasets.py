@@ -96,6 +96,17 @@ REGISTRY: dict[str, Dataset] = {
         "carries the real per-station daily totals; the intraday shape is modelled in the "
         "adapter. Daily totals only — no 15-min/APC data is public, so the shape is modelled.",
     ),
+    "ttc_gtfs": Dataset(
+        slug="ttc-routes-and-schedules",
+        title="TTC Routes and Schedules (GTFS)",
+        cadence="periodic",
+        geo="stop",
+        notes="GTFS ZIP (stops + stop_times). Used for transit SUPPLY: real scheduled evening "
+        "departures per stop (ADR-0032), the supply signal paired with the demand sources. "
+        "Committed downtown slice demo_data/transit_supply__downtown.csv via "
+        "scripts/fetch_gtfs_supply.py; synthetic fallback in CI/dev. (No clean subway-station "
+        "coords here — only mixed platform/surface stops.)",
+    ),
 }
 
 

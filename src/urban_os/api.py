@@ -54,6 +54,7 @@ from urban_os.services import (
     four_lens_stack as _four_lens_stack,
     learned_dynamics_report as _learned_dynamics_report,
     mobility_demand_overlay as _mobility_demand_overlay,
+    transit_supply_overlay as _transit_supply_overlay,
 )
 
 # The civic address-risk app, mounted same-origin at /civic so the unified shell
@@ -418,12 +419,17 @@ def overlays_endpoint() -> dict:
     # own advisory ``bike_demand`` overlay (the lens was configured by the run above).
     # All-zeros when the lens is inert (no slice) — never errors (ADR-0030).
     bike = _mobility_demand_overlay(extra, sub.n)
+    # Transit SUPPLY: real GTFS evening scheduled departures fused per node (ADR-0032) — the
+    # supply signal paired with the demand overlays. Static; synthetic fallback offline.
+    supply = _transit_supply_overlay(sub)
 
     def _norm(a):
         m = float(a.max())
         return a / m if m > 0 else a
 
-    ems_n, resid_n, emit_n, bike_n = _norm(ems), _norm(resid), _norm(emit), _norm(bike)
+    ems_n, resid_n, emit_n, bike_n, supply_n = (
+        _norm(ems), _norm(resid), _norm(emit), _norm(bike), _norm(supply)
+    )
     nodes = [
         {
             "id": sub.ids[i],
@@ -433,6 +439,7 @@ def overlays_endpoint() -> dict:
             "residential": _r(float(resid_n[i]), 3),
             "emissions": _r(float(emit_n[i]), 3),
             "bike_demand": _r(float(bike_n[i]), 3),
+            "transit_supply": _r(float(supply_n[i]), 3),
         }
         for i in range(sub.n)
     ]
