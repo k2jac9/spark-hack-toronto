@@ -60,3 +60,4 @@ cufile.log
 .playwright-mcp/
 before-*.png
 after-*.png
+baseline-*.png

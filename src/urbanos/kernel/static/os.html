@@ -115,6 +115,16 @@
     .combined .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-text); }
     .combined .v { font-size: 38px; font-weight: 800; color: var(--risk-none);
       text-shadow: 0 0 18px color-mix(in srgb, var(--risk-none) 45%, transparent); }
+    /* First-run / do-nothing state: the combined benefit is legitimately $0 until the
+       user acts. Don't render that zero in the triumphant green glow (it reads like a
+       result) — neutralise it and surface a call-to-action so the landing lens invites
+       the first drag. Lights back up to green the instant the benefit is positive.
+       Presentational only — the number itself is unchanged. */
+    .combined.idle { border-color: var(--border-2); box-shadow: var(--shadow-1); }
+    .combined.idle .v { color: var(--text-soft); text-shadow: none; }
+    .combined .cta { display: none; }
+    .combined.idle .nb-line { display: none; }
+    .combined.idle .cta { display: block; font-size: 12px; color: var(--accent-text); margin: 6px 0 0; }
 
     /* Levers. */
     .lever { margin: 10px 0; }
@@ -335,10 +345,11 @@
       <h3>The four lenses</h3>
       <ul>
         <li><b>City</b> — the whole picture + the one lever and its combined benefit.</li>
-        <li><b>Safety</b> — address risk over 3 fused City of Toronto datasets, every number grounded (tap ✓ verify).</li>
+        <li><b>Risk</b> — address risk over 3 fused City of Toronto datasets, every number grounded (tap ✓ verify).</li>
         <li><b>Flow</b> — the crowd-egress simulation; scrub time, see the crush.</li>
         <li><b>Economy</b> — local trade lost to the crush, and recovered.</li>
       </ul>
+      <p class="hint"><b>Keyboard:</b> press <b>1–4</b> to switch lenses · <b>?</b> for this guide.</p>
       <h3>Reading the colours</h3>
       <div class="legend">
         <span class="key"><span class="sw bg-none"></span>none</span>
@@ -740,11 +751,14 @@
           // big number is cross_domain_benefit, LABELLED "cross-domain (additive)" with
           // its ADR-0019 definition on hover; the conservative single-objective J avoided
           // is shown beneath, labelled "net benefit". Tooltips fill in once data loads.
-          '<div class="combined"><div class="k">Combined benefit — one lever, every lens</div>'+
+          // Starts in the do-nothing `idle` state (benefit is $0 until the user acts); the
+          // CTA below shows only while idle, the net-benefit line only once it's positive.
+          '<div class="combined idle"><div class="k">Combined benefit — one lever, every lens</div>'+
             '<div class="v num" id="combined" title="">—</div>'+
-            '<div class="optband" style="margin-top:6px">'+
+            '<div class="optband nb-line" style="margin-top:6px">'+
               '<span id="cd-label" title="">cross-domain (additive)</span> · '+
               'net benefit <b id="net-benefit" class="num" title="">—</b></div>'+
+            '<p class="cta">Do nothing. Drag the lever — or hit ✨ <b>Find the best</b> — to see the benefit.</p>'+
               // ADR-0026: keep the dollars honest — they are calibrated, illustrative.
               '<p class="illus">Figures are calibrated, illustrative — the shape is the claim.</p></div>'+
           '<div class="row"><button class="act" id="opt">✨ Find the best intervention</button></div>'+
@@ -861,7 +875,7 @@
             '<div class="meters">'+
               meterHTML('business','Local business lost (now)', dK(l.business.lost))+
               meterHTML('safety','Public-safety exposure (now)', dK(l.safety.cost))+'</div>'+
-            '<div class="combined"><div class="k">Recovered vs. do-nothing</div><div class="v num">'+dK(l.business.recovered_vs_baseline)+'</div></div>'+
+            '<div class="combined'+(l.business.recovered_vs_baseline>0?'':' idle')+'"><div class="k">Recovered vs. do-nothing</div><div class="v num">'+dK(l.business.recovered_vs_baseline)+'</div></div>'+
             '<p class="hint">Business lost falls as the crowd is spread — the optimizer prices this into the same release lever. Pull it in City or Flow and watch this move.</p>';
           setMeter('business', l.business.lost, base.business.lost);
           setMeter('safety', l.safety.cost, base.safety.cost);
@@ -909,6 +923,11 @@
     const cd = document.getElementById('cd-label'), nb = document.getElementById('net-benefit');
     if (cd) cd.title = benefitTip('cross_domain_benefit');
     if (nb) { nb.textContent = dK(netBenefit); nb.title = benefitTip('j_avoided'); }
+    // First-run: keep the combined hero in its neutral "do-nothing" idle state until the
+    // benefit is actually positive — then it lights up green (presentational only).
+    const card = document.getElementById('combined');
+    const wrap = card && card.closest('.combined');
+    if (wrap) wrap.classList.toggle('idle', !(Number(crossDomain) > 0));
   }
 
   function setLens(id) {
@@ -1134,6 +1153,16 @@
     if (id) { PENDING_LENS = id; setStatus('booting… <b>'+id+'</b> lens queued'); e.preventDefault(); }
     else if (e.key === 'Enter') { setStatus('booting… one moment — loading the city'); e.preventDefault(); }
   }, true);
+  // Once booted, 1–4 keep switching lenses (the boot handler above only queues them).
+  // Guarded so it never hijacks typing in an input/slider, an open dialog, or a chord.
+  addEventListener('keydown', e => {
+    if (!BOOTED || e.altKey || e.ctrlKey || e.metaKey) return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    if (helpDlg.open) return;
+    const id = LENS_KEYS[e.key];
+    if (id && LENSES[id]) { setLens(id); e.preventDefault(); }
+  });
 
   async function boot() {
     try {
