@@ -8,6 +8,8 @@ handlers thin and lets the benefit math be unit-tested without the web layer.
 """
 from __future__ import annotations
 
+import numpy as np
+
 from .kernel import Simulation
 from .learned_dynamics import evaluate as learned_dynamics_evaluate
 from .optimize import objective
@@ -88,6 +90,35 @@ def extra_lens_report(lenses, baseline_result, current_result) -> dict:
             }
         out[ln.name] = entry
     return out
+
+
+def mobility_demand_overlay(lenses, n: int) -> np.ndarray:
+    """Peak-over-time Bike Share trip-origin demand per node, for the map overlay.
+
+    ``MobilityDemandLens`` (Fit C, ADR-0030) writes a time-varying advisory
+    ``bike_demand`` field each step; for a *static* map heat layer we want one value
+    per node — "where demand to leave is highest" — so we take the element-wise max
+    over every demand bin the lens baked during ``configure`` (the peak each node
+    reaches over the run). Returns a raw, non-negative ``(n,)`` array; the caller
+    normalises it 0..1 alongside the other overlay fields.
+
+    Display-only and advisory: this reads the lens's own overlay field and prices
+    nothing, so it cannot move ``J`` or any headline number. Returns all-zeros when
+    the lens is absent or inert (constructed bare / no Bike Share slice) — never an
+    error, so the layer toggle degrades to a flat, empty heat layer."""
+    peak = np.zeros(int(n), dtype=float)
+    lens = next((ln for ln in lenses if ln.name == "mobility_demand"), None)
+    if lens is None:
+        return peak
+    # The lens bakes {bin: (N,) demand} into ``_demand`` during configure(), which the
+    # caller's sim has already run; the peak-over-time is the per-node max across bins.
+    for arr in getattr(lens, "_demand", {}).values():
+        a = np.asarray(arr, dtype=float)
+        if a.shape == peak.shape:
+            peak = np.maximum(peak, np.maximum(0.0, a))
+    # Defensive: keep the overlay finite even if a degenerate value slipped through.
+    np.nan_to_num(peak, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+    return peak
 
 
 def calibration_report(lenses, result) -> dict:
