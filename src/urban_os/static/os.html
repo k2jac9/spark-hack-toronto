@@ -789,7 +789,12 @@
             '<button class="gh" id="hot-btn" aria-pressed="false">◉ Risk hotspots</button></div>'+
           '<div id="hotbox"></div>'+
           '<h3 class="panel-h">Highest-risk addresses<span class="hint" style="text-transform:none;font-weight:400"> · ranked by most-elevated index</span></h3><ul id="addrlist">'+rows+'</ul>'+
-          '<div id="detail"><p class="hint">Pick a pin or address for its grounded risk read.</p></div>'
+          '<div id="detail"><p class="hint">Pick a pin or address for its grounded risk read.</p></div>'+
+          // Drill-down to the full civic Risk view (same product, /civic/) — its
+          // free-text search, city briefing & 3D presentation aren't in this panel.
+          '<p class="hint" style="margin-top:14px">'+
+            '<a href="/civic/" style="color:var(--accent-link);font-weight:700;text-decoration:none">Open the full Risk view ↗</a>'+
+            ' — address search, city briefing &amp; 3D presentation</p>'
         );
         panel.querySelector('#addrlist').addEventListener('click', e => { const b = e.target.closest('button[data-label]'); if (b) analyzeAddress(b.dataset.label); });
         panel.querySelectorAll('.gh[data-label]').forEach(b => b.addEventListener('click', () => analyzeAddress(b.dataset.label)));

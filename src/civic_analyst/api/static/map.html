@@ -21,6 +21,12 @@
              overflow-y: auto; box-sizing: border-box; padding: var(--pad);
              background: var(--surface); color: var(--text); }
     #panel h1 { font-size: var(--fs-h1); margin: 0 0 4px; }
+    /* Home link back to the unified UrbanOS shell — frames this as the Risk lens'
+       full view within one product, not a separate app (ADR-0033). */
+    .homelink { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-sm);
+                font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+                color: var(--text-muted); text-decoration: none; margin: 0 0 6px; }
+    .homelink:hover, .homelink:focus-visible { color: var(--accent-text); }
     #panel h2 { font-size: var(--fs-h2, 13px); margin: 16px 0 6px; color: var(--text-muted);
                 font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
     #addr-h { font-size: var(--fs-addr); margin: 2px 0 0; color: var(--text-strong); } /* the headline */
@@ -191,6 +197,8 @@
   <button id="presmode-btn" class="presmode" type="button" aria-pressed="false"
           title="Toggle Presentation Mode — cyber theme + 3D risk skyline">◢ Presentation</button>
   <div id="panel" role="complementary" aria-label="Risk analysis" tabindex="-1">
+    <!-- Back to the unified shell; resolves to the shell at / under the /civic mount. -->
+    <a href="/" class="homelink" aria-label="Back to the UrbanOS shell">‹ UrbanOS</a>
     <h1>UrbanOS — Risk lens</h1>
     <p class="hint">Address-level civic risk · 100% on-device · pick an address or a map pin</p>
     <ul id="legend" aria-label="Risk legend">
@@ -303,7 +311,9 @@
     async function analyze(address) {
       const detail = document.getElementById('detail');
       detail.innerHTML = '<p class="hint">Analyzing ' + esc(address) + '…</p>';
-      const d = await (await fetch('/analyze?address=' + encodeURIComponent(address))).json();
+      // Mount-relative ('analyze' not '/analyze') so this page works BOTH standalone
+      // (served at /) and mounted under the unified shell at /civic/ — see ADR-0033.
+      const d = await (await fetch('analyze?address=' + encodeURIComponent(address))).json();
       document.querySelectorAll('#addrlist button').forEach((b) =>
         b.setAttribute('aria-current', String(b.dataset.label === address)));
       setSelected(address);
@@ -422,7 +432,7 @@
       digestOut.innerHTML =
         '<p class="hint"><span class="spinner" aria-hidden="true"></span>Generating city briefing… (first run can take ~15s)</p>';
       try {
-        const res = await fetch('/digest');
+        const res = await fetch('digest');  // mount-relative (see analyze() note)
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const d = await res.json();
         const brief = d.digest
@@ -574,7 +584,7 @@
     })();
 
     map.on('load', async () => {
-      const rows = await (await fetch('/addresses')).json();
+      const rows = await (await fetch('addresses')).json();  // mount-relative (see analyze() note)
       ADDR_ROWS = rows;
       const status = document.getElementById('status');
       if (!rows.length) {
