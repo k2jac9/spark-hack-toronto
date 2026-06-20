@@ -70,12 +70,13 @@ cli:
 test:
 	PYTHONPATH=src $(PYTHON) -m pytest -q
 
-# One-command demo: serve the API + offline map against REAL downtown Toronto data.
+# One-command demo: the UNIFIED UrbanOS platform (one app, every lens) on REAL data.
+# Serves the UrbanOS shell at / and the Risk lens (civic risk) at /civic — one front door.
 demo:
-	@echo "Serving REAL downtown Toronto data (demo_data/). Once up:"
-	@echo "  open http://localhost:8000/                 # offline map, real establishments"
-	@echo "  curl 'http://localhost:8000/health'"
-	DATA_DIR=$(DEMO_DATA) $(PYTHON) -m uvicorn civic_analyst.api.server:app --port 8000 --app-dir src
+	@echo "Serving the unified UrbanOS platform on REAL downtown data (demo_data/). Once up:"
+	@echo "  open http://localhost:8000/                 # UrbanOS shell — lenses over one map"
+	@echo "  open http://localhost:8000/civic/           # Risk lens — address-level civic risk"
+	DATA_DIR=$(DEMO_DATA) PYTHONPATH=src $(PYTHON) -m uvicorn urban_os.api:app --port 8000 --app-dir src
 
 # Public demo: same as `make demo`, but also flips this box's Tailscale Funnel
 # ON (public read-only HTTPS URL) for the session and turns it OFF on exit.
