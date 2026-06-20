@@ -109,3 +109,44 @@ def load_counts(data_dir: Path | None = None, key: str = "tmc") -> list[dict[str
         except Exception:  # noqa: BLE001 — a bad slice must not break the load
             continue
     return out
+
+
+def load_station_values(
+    data_dir: Path | None = None, key: str = "ttc_boardings", value_col: str = "boardings"
+) -> list[dict[str, Any]]:
+    """Load **static** per-location values (lat/lng + a single value column, no time axis)
+    from ``{key}__*.csv|json`` — e.g. real TTC daily station boardings. The non-temporal
+    twin of :func:`load_counts`: returns ``{location, lat, lng, value}`` records. Rows
+    outside the Toronto bbox or missing coords/value are dropped (loader hygiene). Empty
+    (not an error) when files are absent — the offline-safe boundary."""
+    data_dir = Path(data_dir) if data_dir is not None else settings.data_dir
+    out: list[dict[str, Any]] = []
+    if not data_dir.exists():
+        return out
+    for path in sorted([*data_dir.glob(f"{key}__*.csv"), *data_dir.glob(f"{key}__*.json")]):
+        try:
+            columns, rows = _read_rows(path)
+            if not rows:
+                continue
+            lat_col = _find_col(columns, ("latitude", "lat"))
+            lng_col = _find_col(columns, ("longitude", "long", "lng"))
+            val_col = _find_col(columns, (value_col, "value", "volume", "count", "total"))
+            loc_col = _find_col(columns, ("location", "station", "name"))
+            if not (lat_col and lng_col and val_col):
+                continue
+            for row in rows:
+                lat, lng = _coord(row, lat_col), _coord(row, lng_col)
+                if lat is None or lng is None or not in_toronto_bbox(lat, lng):
+                    continue
+                value = _parse_float(row.get(val_col))
+                if value is None or value < 0:
+                    continue
+                out.append({
+                    "location": str(row.get(loc_col, "")).strip() if loc_col else "",
+                    "lat": lat,
+                    "lng": lng,
+                    "value": value,
+                })
+        except Exception:  # noqa: BLE001 — a bad slice must not break the load
+            continue
+    return out

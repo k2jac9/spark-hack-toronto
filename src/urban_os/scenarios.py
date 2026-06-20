@@ -17,6 +17,7 @@ from .adapters import (
     civic_activity_by_node,
     civic_safety_by_node,
     observed_counts_by_node,
+    ttc_boardings_by_node,
 )
 from .lenses import (
     BusinessFlow,
@@ -46,6 +47,7 @@ def default_lens_stack(
     safety: bool = False,
     business: bool = False,
     transit_load: bool = False,
+    transit_source: str = "tmc",
 ) -> list:
     """Build the Urban-OS lens stack for scenario ``sc``.
 
@@ -58,6 +60,10 @@ def default_lens_stack(
       unmoved. **Default False keeps the stack byte-identical to before**, so the golden
       CLI numbers (do-nothing J $323,222, best 14-min → $105,050) are untouched unless a
       caller explicitly opts in.
+    - ``transit_source`` → which real series feeds TransitLoad when it's on:
+      ``"tmc"`` (default) = real Toronto TMC 15-min throughput (real intraday shape);
+      ``"ttc"`` = real TTC subway boardings distributed by a modelled evening shape
+      (real magnitude / modelled shape, ADR-0031). Ignored when ``transit_load`` is off.
 
     The base (EventSurge + Economic) always runs. Callers:
     - API optimizer/narrator stack: ``default_lens_stack(sc, weather=True)``
@@ -84,10 +90,14 @@ def default_lens_stack(
         # transit + safety + economics together.
         stack.append(BusinessFlow(sc.venue_id))
     if transit_load:
-        # Add the REAL measured background ridership (Toronto TMC 15-min counts fused
-        # onto the substrate) as an honest extra source term — people entering the
-        # transit system on top of the event egress. No lever, no J cost (ADR-0029).
-        stack.append(TransitLoadLens(observed_counts_by_node(sc.substrate)))
+        # Add REAL background ridership as an honest extra source term — people entering
+        # the transit system on top of the event egress. No lever, no J cost (ADR-0029).
+        # Source: TMC throughput (default) or TTC subway boardings (ADR-0031).
+        if transit_source == "ttc":
+            counts = ttc_boardings_by_node(sc.substrate)
+        else:
+            counts = observed_counts_by_node(sc.substrate)
+        stack.append(TransitLoadLens(counts))
     return stack
 
 

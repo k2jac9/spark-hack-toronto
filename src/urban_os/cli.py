@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from .adapters import downtown_scenario
@@ -23,14 +24,19 @@ from .optimize import objective, optimize
 from .scenarios import default_lens_stack
 
 
-def _lenses(sc, *, business: bool = False, safety: bool = False, transit_load: bool = False):
+def _lenses(
+    sc, *, business: bool = False, safety: bool = False,
+    transit_load: bool = False, transit_source: str = "tmc",
+):
     """The CLI lens stack, via the shared builder so the CLI and API can never run
     different stacks (ADR-0022). The CLI omits WeatherLens (no shelter lever) — the
     deliberate, documented reason ``make urbanos-cli`` and the :8001 UI report
     different headline numbers. ``transit_load`` is opt-in and adds no lever/cost
-    (ADR-0029), so the golden numbers are unchanged when it is off."""
+    (ADR-0029), so the golden numbers are unchanged when it is off; ``transit_source``
+    picks its real series (tmc throughput | ttc boardings, ADR-0031)."""
     return default_lens_stack(
-        sc, safety=safety, business=business, transit_load=transit_load
+        sc, safety=safety, business=business,
+        transit_load=transit_load, transit_source=transit_source,
     )
 
 
@@ -53,11 +59,18 @@ def main(argv: list[str] | None = None) -> int:
                    help="add the TransitLoad lens (real measured background ridership as "
                         "a source; opt-in, no lever/cost — ADR-0029). Default from "
                         "URBANOS_TRANSIT_LOAD.")
+    p.add_argument("--transit-source", dest="transit_source",
+                   choices=("tmc", "ttc"),
+                   default=os.environ.get("URBANOS_TRANSIT_SOURCE", "tmc"),
+                   help="real series feeding TransitLoad: 'tmc' (throughput, default) or "
+                        "'ttc' (subway boardings, real magnitude/modelled shape — ADR-0031). "
+                        "Default from URBANOS_TRANSIT_SOURCE.")
     args = p.parse_args(argv)
 
     sc = downtown_scenario(**({"crowd_size": args.crowd} if args.crowd else {}))
     lenses = _lenses(
-        sc, business=args.business, safety=args.safety, transit_load=args.transit_load
+        sc, business=args.business, safety=args.safety,
+        transit_load=args.transit_load, transit_source=args.transit_source,
     )
 
     if args.release is not None:
