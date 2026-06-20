@@ -85,6 +85,17 @@ REGISTRY: dict[str, Dataset] = {
         "the substrate. A committed downtown slice (demo_data/bikeshare__downtown.csv, built by "
         "scripts/fetch_bikeshare.py) backs the demo; synthetic fallback in CI/dev.",
     ),
+    "ttc_station_usage": Dataset(
+        slug="ttc-ridership-subway-scarborough-rt-station-usage",
+        title="TTC Subway Station Usage",
+        cadence="periodic",
+        geo="station",
+        notes="Real typical-weekday boardings per subway station (XLSX). The REAL MAGNITUDE "
+        "behind the TTC TransitLoad source (ADR-0031): a committed downtown slice "
+        "(demo_data/ttc_boardings__downtown.csv, built by scripts/fetch_ttc_boardings.py) "
+        "carries the real per-station daily totals; the intraday shape is modelled in the "
+        "adapter. Daily totals only — no 15-min/APC data is public, so the shape is modelled.",
+    ),
 }
 
 

@@ -462,6 +462,119 @@ def _synthetic_bikeshare_demand_by_node(substrate) -> dict[str, dict[float, floa
     return out
 
 
+# --- TTC subway boardings source (REAL magnitude, MODELLED intraday shape) ----------
+# A real "measured TTC boardings" source for the TransitLoad lens (ADR-0031). The committed
+# slice (demo_data/ttc_boardings__downtown.csv, built by scripts/fetch_ttc_boardings.py) is
+# real typical-weekday boardings per downtown subway station (a daily total, no time axis).
+# Here we distribute that real magnitude across the sim window with a DOCUMENTED evening-peak
+# profile, so the per-bin series is honestly real-magnitude / modelled-shape — distinct from
+# the TMC path (real intraday throughput) the lens uses by default.
+
+# Provenance marker: the magnitude is real (TTC station usage); the intraday distribution is
+# modelled. Distinct from TMC's "real/measured" so a consumer never conflates the two.
+TTC_BOARDINGS_PROVENANCE = "real-magnitude/modelled-shape"
+# Share of a weekday's boardings modelled into the ~2h evening peak window. A standard
+# transit-planning order of magnitude (documented, NOT fit to any headline number) — it sets
+# how much real daily ridership the source injects during the egress window.
+_TTC_PM_SHARE = 0.20
+
+_TTC_BOARDINGS_CACHE: list | None = None
+
+
+def reset_ttc_boardings_cache() -> None:
+    """Clear the cached TTC boardings records (parity with the other ingest caches)."""
+    global _TTC_BOARDINGS_CACHE
+    _TTC_BOARDINGS_CACHE = None
+
+
+def _default_ttc_boardings() -> list:
+    """Default provider: the committed real per-station boardings slice via the civic
+    time-series loader (static values, ``key="ttc_boardings"``), read ONCE and cached. Empty
+    when no slice is on the loader's path → callers fall back to a synthetic series."""
+    global _TTC_BOARDINGS_CACHE
+    if _TTC_BOARDINGS_CACHE is None:
+        from civic_analyst.ingest import timeseries
+
+        _TTC_BOARDINGS_CACHE = timeseries.load_station_values(
+            key="ttc_boardings", value_col="boardings"
+        )
+    return _TTC_BOARDINGS_CACHE
+
+
+def _ttc_intraday_shape(center: float = 60.0, width: float = 22.0):
+    """The MODELLED evening-peak intraday profile over the sim window: a normalized Gaussian
+    on the 15-min grid (sums to 1). Centred near the egress peak; the shape is modelled, the
+    per-station scale it multiplies is real."""
+    import numpy as np
+
+    bins = [float(m) for m in range(0, 121, 15)]
+    g = np.array([np.exp(-0.5 * ((b - center) / width) ** 2) for b in bins])
+    total = float(g.sum())
+    return bins, (g / total if total > 0 else g)
+
+
+def _synthetic_ttc_boardings_by_node(substrate) -> dict[str, dict[float, float]]:
+    """Deterministic placeholder TTC boardings (no real data needed): capacity-scaled daily
+    boardings per non-sink node, distributed by the same modelled evening shape. Keeps the
+    source running offline; clearly synthetic."""
+    import numpy as np
+
+    cap = substrate.capacity.astype(float)
+    peak = float(np.where(~substrate.is_sink, cap, 0.0).max()) or 1.0
+    bins, shape = _ttc_intraday_shape()
+    out: dict[str, dict[float, float]] = {}
+    for i, nid in enumerate(substrate.ids):
+        daily = 0.0 if substrate.is_sink[i] else float(cap[i]) / peak * 100000.0
+        win = daily * _TTC_PM_SHARE
+        out[nid] = {b: win * float(shape[k]) for k, b in enumerate(bins)}
+    return out
+
+
+def ttc_boardings_by_node(
+    substrate, *, radius_deg: float = 0.0045, provider=None
+) -> dict[str, dict[float, float]]:
+    """Per-node TTC subway boarding source for ``TransitLoadLens`` (ADR-0031): REAL daily
+    station boardings (the committed slice) distributed across the sim window by a MODELLED
+    evening-peak shape — ``{node_id: {minute: count}}``.
+
+    Each station's real boardings are distributed to NON-SINK nodes by normalized proximity
+    (conserving the real magnitude across nodes), then spread over the window by
+    :func:`_ttc_intraday_shape` scaled by :data:`_TTC_PM_SHARE`. Real magnitude, modelled
+    shape (:data:`TTC_BOARDINGS_PROVENANCE`). Falls back to a deterministic synthetic series
+    when no slice is present, so the source still runs offline."""
+    import numpy as np
+
+    try:
+        recs = (provider or _default_ttc_boardings)()
+        recs = [r for r in recs if r.get("lat") is not None and r.get("lng") is not None]
+        if not recs:
+            raise RuntimeError("no ttc boardings loaded")
+        # Distribute each station's real boardings to non-sink nodes by normalized proximity.
+        node_daily = np.zeros(substrate.n, dtype=float)
+        for r in recs:
+            w = np.zeros(substrate.n, dtype=float)
+            for i in range(substrate.n):
+                if substrate.is_sink[i]:
+                    continue
+                dlat = r["lat"] - float(substrate.lat[i])
+                dlng = (r["lng"] - float(substrate.lng[i])) * np.cos(
+                    np.radians(float(substrate.lat[i]))
+                )
+                w[i] = np.exp(-(dlat * dlat + dlng * dlng) / (radius_deg * radius_deg))
+            s = float(w.sum())
+            if s > 0:
+                node_daily += float(r["value"]) * (w / s)
+        bins, shape = _ttc_intraday_shape()
+        out: dict[str, dict[float, float]] = {}
+        for i, nid in enumerate(substrate.ids):
+            win = float(node_daily[i]) * _TTC_PM_SHARE
+            out[nid] = {b: win * float(shape[k]) for k, b in enumerate(bins)}
+        return out
+    except Exception as exc:
+        _log.warning("ttc-boardings fusion failed, using synthetic fallback: %s", exc)
+        return _synthetic_ttc_boardings_by_node(substrate)
+
+
 def bikeshare_demand_by_node(
     substrate, *, radius_deg: float = 0.0045, provider=None
 ) -> dict[str, dict[float, float]]:

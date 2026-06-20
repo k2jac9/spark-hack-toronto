@@ -16,6 +16,8 @@ from .toronto import (
     observed_counts_by_node,
     reset_bikeshare_demand_cache,
     reset_observed_counts_cache,
+    reset_ttc_boardings_cache,
+    ttc_boardings_by_node,
 )
 
 __all__ = [
@@ -28,4 +30,7 @@ __all__ = [
     # Bike Share trip-origin demand (origins-as-demand) — the MobilityDemand grounding.
     "bikeshare_demand_by_node",
     "reset_bikeshare_demand_cache",
+    # TTC subway boardings (real magnitude, modelled shape) — a TransitLoad source (ADR-0031).
+    "ttc_boardings_by_node",
+    "reset_ttc_boardings_cache",
 ]
