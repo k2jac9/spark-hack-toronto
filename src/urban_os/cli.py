@@ -17,17 +17,21 @@ import sys
 
 from .adapters import downtown_scenario
 from .kernel import Simulation
+from .lenses import transit_load_enabled
 from .narrate import build_insight
 from .optimize import objective, optimize
 from .scenarios import default_lens_stack
 
 
-def _lenses(sc, *, business: bool = False, safety: bool = False):
+def _lenses(sc, *, business: bool = False, safety: bool = False, transit_load: bool = False):
     """The CLI lens stack, via the shared builder so the CLI and API can never run
     different stacks (ADR-0022). The CLI omits WeatherLens (no shelter lever) — the
     deliberate, documented reason ``make urbanos-cli`` and the :8001 UI report
-    different headline numbers."""
-    return default_lens_stack(sc, safety=safety, business=business)
+    different headline numbers. ``transit_load`` is opt-in and adds no lever/cost
+    (ADR-0029), so the golden numbers are unchanged when it is off."""
+    return default_lens_stack(
+        sc, safety=safety, business=business, transit_load=transit_load
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,10 +48,17 @@ def main(argv: list[str] | None = None) -> int:
                    help="add the Sports/Business-Flow lens (local trade lost to the crush)")
     p.add_argument("--safety", action="store_true",
                    help="add the Safety lens (civic_analyst address risk → node field)")
+    p.add_argument("--transit-load", dest="transit_load", action="store_true",
+                   default=transit_load_enabled(),
+                   help="add the TransitLoad lens (real measured background ridership as "
+                        "a source; opt-in, no lever/cost — ADR-0029). Default from "
+                        "URBANOS_TRANSIT_LOAD.")
     args = p.parse_args(argv)
 
     sc = downtown_scenario(**({"crowd_size": args.crowd} if args.crowd else {}))
-    lenses = _lenses(sc, business=args.business, safety=args.safety)
+    lenses = _lenses(
+        sc, business=args.business, safety=args.safety, transit_load=args.transit_load
+    )
 
     if args.release is not None:
         # Single deterministic run at a fixed lever — no search.

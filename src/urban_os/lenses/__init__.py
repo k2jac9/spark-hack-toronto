@@ -28,6 +28,7 @@ from .event_surge import EventSurge
 from .fare_revenue import FareRevenueLens
 from .noise_livability import NoiseLivabilityLens
 from .safety import SafetyLens
+from .transit_load import TransitLoadLens, transit_load_enabled
 from .weather import WeatherLens
 
 __all__ = [
@@ -45,4 +46,8 @@ __all__ = [
     # Data-driven calibration lens (advisory-only, no levers, no cost — Phase 1 of
     # docs/research/tpf-and-data-driven-lenses.md): kernel-vs-observed agreement.
     "CongestionNowcastLens",
+    # Data-driven REAL source lens (opt-in, off by default, no levers, no cost — Fit C
+    # of the roadmap, ADR-0029): measured TTC/TMC background ridership injected as load.
+    "TransitLoadLens",
+    "transit_load_enabled",
 ]
