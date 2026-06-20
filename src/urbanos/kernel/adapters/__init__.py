@@ -16,7 +16,13 @@ from .toronto import (
     observed_counts_by_node,
     reset_bikeshare_demand_cache,
     reset_observed_counts_cache,
+    bike_theft_by_node,
+    emergency_by_node,
+    enforcement_by_node,
     footfall_by_node,
+    reset_bike_theft_cache,
+    reset_emergency_cache,
+    reset_enforcement_cache,
     reset_road_disruption_cache,
     reset_road_risk_cache,
     reset_transit_supply_cache,
@@ -51,4 +57,13 @@ __all__ = [
     # Road disruption (real active road closures / restrictions) — a display overlay (ADR-0038).
     "road_disruption_by_node",
     "reset_road_disruption_cache",
+    # Automated enforcement (real red-light + speed cameras) — a display overlay (ADR-0039).
+    "enforcement_by_node",
+    "reset_enforcement_cache",
+    # Bike theft (real reported bicycle thefts) — a display overlay (ADR-0040).
+    "bike_theft_by_node",
+    "reset_bike_theft_cache",
+    # Emergency response (real TFS fire-incident responses) — a display overlay (ADR-0041).
+    "emergency_by_node",
+    "reset_emergency_cache",
 ]
