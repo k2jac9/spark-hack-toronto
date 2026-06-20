@@ -16,12 +16,15 @@ Honesty stance (roadmap §7 — none regressed; mirrors CongestionNowcast/Transi
   cost**, and it lives in ``scenarios.extra_display_lenses`` — which is deliberately
   excluded from the optimizer's objective ``J`` — so it CANNOT move the chosen intervention
   or any headline dollar figure (the additivity contract test pins this).
-- **Real demand, synthetic fallback until a slice is committed.** There is no committed
-  Bike Share slice today, so (like the registered ``ttc_ridership`` dataset) it runs on a
-  deterministic synthetic series; the real-data path is wired so a future committed
-  ``bikeshare__*.csv`` lights it up with no lens or kernel change.
-- **Provenance honesty.** Output is stamped via :data:`PROVENANCE`: ``"real/measured"``
-  only when backed by a real slice; honestly ``"synthetic/advisory"`` on the fallback.
+- **Real demand under the demo, synthetic fallback in CI/dev.** A committed downtown slice
+  (``demo_data/bikeshare__downtown.csv`` — real Q1-2026 evening trip origins, located via the
+  GBFS station feed; see ``scripts/fetch_bikeshare.py``) backs the demo, which loads it with
+  ``DATA_DIR=demo_data``. Without that slice on the loader's path (CI/dev) the adapter falls
+  back to a deterministic synthetic series, so tests stay offline and the lens always runs.
+- **Provenance honesty.** :data:`PROVENANCE` is the *fallback* label (``"synthetic/advisory"``),
+  accurate in CI/dev where the synthetic series is used; under the demo the same
+  ``{node: {minute: count}}`` shape carries the real measured origins. The value is not
+  surfaced at runtime, so it is documentation, not a claim attached to any number.
 - **Offline-safe.** Constructed bare (no series) the lens is an inert no-op; the adapter
   supplies a deterministic synthetic series when no real slice is present, so CI/dev never
   need real data or network.
@@ -35,10 +38,11 @@ import numpy as np
 from ..kernel.operators import Lens
 from ..kernel.state import State, Substrate
 
-# Provenance marker for this lens's output. The fallback today is synthetic, so the honest
-# default is "synthetic/advisory"; a future committed Bike Share slice would warrant
-# stamping "real/measured" (matching the TransitLoad convention). Either way the lens is
-# clearly ADVISORY — display-only, never priced, never a headline number.
+# Provenance marker — the FALLBACK label, accurate in CI/dev where the synthetic series is
+# used. Under the demo (DATA_DIR=demo_data) the same shape carries the real committed
+# Bike Share origins (demo_data/bikeshare__downtown.csv). The value is not surfaced at
+# runtime; either way the lens is clearly ADVISORY — display-only, never priced, never a
+# headline number.
 PROVENANCE = "synthetic/advisory"
 
 

@@ -79,10 +79,11 @@ REGISTRY: dict[str, Dataset] = {
         title="Bike Share Toronto Ridership",
         cadence="monthly",
         geo="station",
-        notes="Anonymised trip OD + timestamps (900+ stations). Read here as ORIGINS-AS-"
-        "DEMAND: trip starts per station per 15-min bin = the local 'demand to leave' "
-        "field the MobilityDemand display lens (ADR-0030) lifts onto the substrate. "
-        "Synthetic-fallback until a committed bikeshare__*.csv slice lights it up.",
+        notes="Anonymised trip OD + timestamps (1000+ stations; coords via the GBFS station "
+        "feed). Read here as ORIGINS-AS-DEMAND: trip starts per station per 15-min bin = the "
+        "local 'demand to leave' field the MobilityDemand display lens (ADR-0030) lifts onto "
+        "the substrate. A committed downtown slice (demo_data/bikeshare__downtown.csv, built by "
+        "scripts/fetch_bikeshare.py) backs the demo; synthetic fallback in CI/dev.",
     ),
 }
 

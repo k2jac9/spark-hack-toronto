@@ -57,6 +57,21 @@ def test_observed_counts_by_node_wellformed(tmp_path):
     assert series == observed_counts_by_node(sub, mode="ped", provider=prov)
 
 
+def test_committed_bikeshare_slice_is_real_downtown_demand():
+    """The committed real slice (demo_data/bikeshare__downtown.csv, built by
+    scripts/fetch_bikeshare.py) parses to downtown bike trip-origin rows — a guard that the
+    MobilityDemand real-data path stays wired and the slice isn't deleted/corrupted."""
+    from pathlib import Path
+
+    demo = Path(__file__).resolve().parent.parent / "demo_data"
+    recs = timeseries.load_counts(demo, key="bikeshare")
+    assert recs, "expected a committed bikeshare__downtown.csv slice"
+    assert all(r["mode"] == "bike" for r in recs)
+    # All within the Toronto downtown bbox and a sane evening time window.
+    assert all(43.62 <= r["lat"] <= 43.69 and -79.43 <= r["lng"] <= -79.34 for r in recs)
+    assert all(r["volume"] > 0 for r in recs)
+
+
 def test_observed_counts_synthetic_fallback_when_empty():
     sub = downtown_substrate()
     series = observed_counts_by_node(sub, provider=lambda: [])  # empty -> synthetic

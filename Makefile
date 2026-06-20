@@ -113,6 +113,7 @@ funnel-off-all:
 demo-data:
 	PYTHONPATH=src $(PYTHON) scripts/build_demo_slice.py
 	PYTHONPATH=src $(PYTHON) scripts/fetch_tmc.py
+	PYTHONPATH=src $(PYTHON) scripts/fetch_bikeshare.py
 
 # Quick deterministic check (synthetic fixtures): prints a populated report and exits.
 # 100 Queen St W → two independent indices (ADR 0014):
