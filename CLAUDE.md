@@ -107,7 +107,15 @@ Layout: `src/urbanos/risk/{ingest,graph,agents,api}`, `src/urbanos/kernel/`, `te
 > optimizer's grounded insight + before/after (was Flow-only). **Visual/integration only — golden
 > numbers, the offline map, and the hallucination guard are unchanged; Suite still 584 green / 1
 > skipped.** Python packages stay `urbanos.kernel`/`urbanos.risk` for now; the source-package + local
-> folder rename to UrbanOS are **deliberately deferred** (their own future step, not started).
+> folder rename to UrbanOS are **done** (ADR-0034 / #119; folder renamed to `…\UrbanOs`).
+
+> **Look + Risk-lens arc (2026-06-20, ADR-0035).** Post-unification polish: #120 first-run UX
+> (idle combined hero + 1–4 keys post-boot + lens-IA fix). Now shipping a 2-PR arc — **cyber/
+> holographic look is the default** across the whole shell (attribute-driven `data-theme="cyber"`;
+> azure→iris kept as the reachable alt via the Appearance toggle; the optimize climax became an
+> `html.climax` intensifier) and the **Risk lens embeds the full civic analyst** (same-origin
+> `/civic/?embed=1` iframe — briefing + Presentation 3D + analyze/verify inline). Visual/integration
+> only; golden numbers + offline map + guard unchanged.
 
 **Context & origin docs:** `docs/ON_THE_BOX.md` (box runbook, operational), `docs/HANDOFF.md`,
 `docs/PITCH.md`, `docs/video/` — the last three are **origin/hackathon artifacts**, kept as
