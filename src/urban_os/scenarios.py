@@ -27,6 +27,7 @@ from .lenses import (
     FareRevenueLens,
     NoiseLivabilityLens,
     SafetyLens,
+    TransitLoadLens,
     WeatherLens,
 )
 
@@ -37,18 +38,30 @@ _WEATHER_WIDTH = 20.0
 
 
 def default_lens_stack(
-    sc, *, weather: bool = False, safety: bool = False, business: bool = False
+    sc,
+    *,
+    weather: bool = False,
+    safety: bool = False,
+    business: bool = False,
+    transit_load: bool = False,
 ) -> list:
     """Build the Urban-OS lens stack for scenario ``sc``.
 
-    - ``weather``  → append WeatherLens (the shelter-coverage optimizer lever).
-    - ``safety``   → append SafetyLens (civic address risk fused onto the substrate).
-    - ``business`` → append BusinessFlow (local trade lost to the crush).
+    - ``weather``      → append WeatherLens (the shelter-coverage optimizer lever).
+    - ``safety``       → append SafetyLens (civic address risk fused onto the substrate).
+    - ``business``     → append BusinessFlow (local trade lost to the crush).
+    - ``transit_load`` → append TransitLoadLens (REAL measured background ridership as a
+      ``source``, opt-in; ADR-0029). It adds no lever and no J cost — a realism source,
+      not a priced lever — so the optimizer's choice and every headline number are
+      unmoved. **Default False keeps the stack byte-identical to before**, so the golden
+      CLI numbers (do-nothing J $323,222, best 14-min → $105,050) are untouched unless a
+      caller explicitly opts in.
 
     The base (EventSurge + Economic) always runs. Callers:
     - API optimizer/narrator stack: ``default_lens_stack(sc, weather=True)``
     - API cross-domain 4-lens stack: ``default_lens_stack(sc, safety=True, business=True)``
-    - CLI: ``default_lens_stack(sc, safety=args.safety, business=args.business)``
+    - CLI: ``default_lens_stack(sc, safety=args.safety, business=args.business,
+      transit_load=args.transit_load)``
     """
     stack = [EventSurge(events=sc.events), EconomicLens()]
     if weather:
@@ -68,6 +81,11 @@ def default_lens_stack(
         # Price the local trade a crush destroys, so the levers are optimized for
         # transit + safety + economics together.
         stack.append(BusinessFlow(sc.venue_id))
+    if transit_load:
+        # Add the REAL measured background ridership (Toronto TMC 15-min counts fused
+        # onto the substrate) as an honest extra source term — people entering the
+        # transit system on top of the event egress. No lever, no J cost (ADR-0029).
+        stack.append(TransitLoadLens(observed_counts_by_node(sc.substrate)))
     return stack
 
 
