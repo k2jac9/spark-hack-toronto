@@ -31,7 +31,7 @@ def page() -> str:
 
 
 def test_is_the_civic_map_page(page: str) -> None:
-    assert "Toronto Civic Risk Analyst" in page and "<html" in page.lower()
+    assert "UrbanOS" in page and "<html" in page.lower()
 
 
 def test_no_known_cdn_or_tile_hosts(page: str) -> None:
@@ -56,7 +56,7 @@ def test_references_vendored_offline_assets(page: str) -> None:
 @pytest.mark.parametrize(
     "marker",
     [
-        "<h1>Toronto Civic Risk Analyst",   # page heading
+        "<h1>UrbanOS — Risk lens",          # page heading
         'class="skip"',                     # a11y: skip link
         'id="legend"',                      # clarity: risk legend (shape + colour)
         'class="provchips"',                # ADR-0026: dataset provenance chips

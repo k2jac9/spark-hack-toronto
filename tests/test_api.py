@@ -56,7 +56,7 @@ def test_endpoints_with_fixtures():
 
         # Map page serves and uses vendored, offline MapLibre + PMTiles (no CDN).
         page = client.get("/").text
-        assert "Toronto Civic Risk Analyst" in page
+        assert "UrbanOS" in page
         assert "/static/vendor/maplibre-gl.js" in page
         assert "/static/vendor/pmtiles.js" in page
         assert "/static/toronto.pmtiles" in page

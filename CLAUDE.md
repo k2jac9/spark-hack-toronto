@@ -1,4 +1,4 @@
-# Toronto Civic Risk Analyst — Team Workflow (read first)
+# UrbanOS — Team Workflow (read first)
 
 Shared conventions for both teammates (**@cyberqubit**, **@k2jac9**) and **both Claude Code
 sessions**. Anything here applies whether a human or Claude is making the change.
