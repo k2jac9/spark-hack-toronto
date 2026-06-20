@@ -26,10 +26,17 @@
       display: flex; align-items: center; gap: 16px; padding: 0 18px;
       background: linear-gradient(180deg, rgba(5,8,15,.92), rgba(5,8,15,0));
       pointer-events: none; }
-    /* <h1> wordmark — reset the UA heading margins/size so it still reads as the bar logo. */
-    #wordmark { margin: 0; font-weight: 900; letter-spacing: .14em; font-size: 18px;
-      color: var(--text-strong); text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 60%, transparent); }
-    #wordmark .os { color: var(--accent); }
+    /* Brand lockup — wordmark + tagline stacked, so the bar reads as the product
+       signature (Identity v2). */
+    #brand { display: flex; flex-direction: column; justify-content: center; gap: 1px; line-height: 1.02; }
+    /* <h1> wordmark — reset the UA heading margins/size so it still reads as the bar logo.
+       The azure→iris brand gradient is clipped to the glyphs; the duotone glow sits behind. */
+    #wordmark { margin: 0; font-weight: 900; letter-spacing: .15em; font-size: 19px;
+      background: var(--brand-grad); -webkit-background-clip: text; background-clip: text;
+      color: transparent; -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 12px color-mix(in srgb, var(--brand-glow) 70%, transparent)); }
+    /* Tagline under the wordmark — the product promise, collapses on narrow viewports. */
+    #brandline { font-size: 11px; font-weight: 600; letter-spacing: .03em; color: var(--text-muted); white-space: nowrap; }
     #scenario-tag { font-size: 12px; color: var(--text-soft); }
     #status { margin-left: auto; font-size: 12px; color: var(--text-muted);
       background: rgba(15,23,42,.7); border: 1px solid var(--border-2); border-radius: var(--pill);
@@ -50,9 +57,10 @@
     .lens[aria-current="true"] { color: var(--text-strong); border-color: var(--accent);
       background: var(--surface-sel); box-shadow: var(--shadow-2), var(--shadow-glow); }
     .lens[aria-current="true"] .ic { filter: none; }
-    /* signature: a left accent indicator on the active lens. */
+    /* signature: a brand-gradient indicator on the active lens (matches the wordmark). */
     .lens[aria-current="true"]::before { content: ""; position: absolute; left: -1px; top: 14px; bottom: 14px;
-      width: 3px; border-radius: var(--pill); background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+      width: 3px; border-radius: var(--pill); background: var(--brand-grad);
+      box-shadow: 0 0 10px var(--brand-glow); }
 
     /* Side panel — swaps per lens (<400ms, Doherty). */
     #panel { position: absolute; top: 64px; right: 14px; bottom: 14px; width: 34vw;
@@ -270,6 +278,7 @@
     }
     @media (max-width: 820px) {
       #topbar { height: auto; flex-wrap: wrap; padding: 6px 12px; gap: 8px; }
+      #brandline { display: none; }  /* keep the bar to one compact row on phones */
       #scenario-tag { flex-basis: 100%; order: 3; }
       #dock { flex-direction: row; top: auto; bottom: calc(48vh + 10px); left: 50%;
         transform: translateX(-50%); gap: 8px; }
@@ -302,8 +311,12 @@
   <div id="flash" aria-hidden="true"></div>
 
   <div id="topbar">
-    <!-- F-10b: the wordmark is the page's real <h1> (was a styling-only span). -->
-    <h1 id="wordmark">URBAN<span class="os">OS</span></h1>
+    <!-- F-10b: the wordmark is the page's real <h1> (was a styling-only span).
+         Identity v2: wordmark + tagline form one brand lockup. -->
+    <div id="brand">
+      <h1 id="wordmark">URBAN<span class="os">OS</span></h1>
+      <span id="brandline">Turning urban data into real-time insight</span>
+    </div>
     <span id="scenario-tag" class="num"></span>
     <span id="status">booting…</span>
     <!-- ADR-0026: "How it works" — orientation, legend & provenance on demand (Depth). -->
