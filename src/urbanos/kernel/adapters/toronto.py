@@ -665,3 +665,78 @@ def bikeshare_demand_by_node(
     except Exception as exc:
         _log.warning("bikeshare-demand fusion failed, using synthetic fallback: %s", exc)
         return _synthetic_bikeshare_demand_by_node(substrate)
+
+
+# --- road-RISK overlay (real Vision Zero / KSI collision history) ---------------------
+# Where the crush shows where the crowd piles up, this shows where the ROAD is historically
+# dangerous: severity-weighted Killed-or-Seriously-Injured collision records (2014+) fused
+# onto the substrate as a static per-node danger density (scripts/fetch_ksi.py). A display
+# overlay (ADR-0036) — no lever, no J, never a headline number. Real/measured (a count of
+# real geocoded KSI records, weighted by injury severity; the relative shape is the claim).
+
+ROAD_RISK_PROVENANCE = "real/measured"
+_ROAD_RISK_CACHE: list | None = None
+
+
+def reset_road_risk_cache() -> None:
+    """Clear the cached KSI records (parity with the other ingest caches)."""
+    global _ROAD_RISK_CACHE
+    _ROAD_RISK_CACHE = None
+
+
+def _default_road_risk() -> list:
+    """Default provider: the committed real KSI slice via the static-value loader
+    (``key="ksi"``, severity as the value), read ONCE and cached. Empty when no slice is on
+    the loader's path → callers fall back to a synthetic field."""
+    global _ROAD_RISK_CACHE
+    if _ROAD_RISK_CACHE is None:
+        from urbanos.risk.ingest import timeseries
+
+        _ROAD_RISK_CACHE = timeseries.load_station_values(key="ksi", value_col="severity")
+    return _ROAD_RISK_CACHE
+
+
+def _synthetic_road_risk_by_node(substrate) -> dict[str, float]:
+    """Deterministic placeholder road-danger density (no real data needed): busier, more
+    central intersections (higher capacity) carry more historical collisions. Keeps the
+    overlay running offline; clearly synthetic, normalised 0..1."""
+    import numpy as np
+
+    cap = substrate.capacity.astype(float)
+    base = np.where(~substrate.is_sink, np.sqrt(np.maximum(cap, 0.0)), 0.0)
+    peak = float(base.max()) or 1.0
+    return {nid: float(base[i] / peak) for i, nid in enumerate(substrate.ids)}
+
+
+def road_risk_by_node(
+    substrate, *, radius_deg: float = 0.0045, provider=None
+) -> dict[str, float]:
+    """Per-node road-danger density — severity-weighted KSI collision records lifted onto the
+    substrate by a Gaussian proximity-weighted SUM (``{node_id: density}``), a static overlay.
+    A SUM (not an average) because danger is cumulative: more severe collisions nearby ⇒ more
+    dangerous. Returns raw non-negative values (the lens/caller normalises 0..1). Falls back to
+    a deterministic synthetic field when no KSI slice is present (offline-safe, ADR-0036)."""
+    import numpy as np
+
+    try:
+        recs = (provider or _default_road_risk)()
+        recs = [r for r in recs if r.get("lat") is not None and r.get("lng") is not None]
+        if not recs:
+            raise RuntimeError("no KSI records loaded")
+        rl = np.array([r["lat"] for r in recs], dtype=float)
+        ro = np.array([r["lng"] for r in recs], dtype=float)
+        rv = np.array([float(r["value"]) for r in recs], dtype=float)
+        out: dict[str, float] = {}
+        for i, nid in enumerate(substrate.ids):
+            if substrate.is_sink[i]:
+                out[nid] = 0.0   # sinks are abstract exit lines, not real road locations
+                continue
+            la, lo = float(substrate.lat[i]), float(substrate.lng[i])
+            dlat = rl - la
+            dlng = (ro - lo) * np.cos(np.radians(la))
+            w = np.exp(-(dlat * dlat + dlng * dlng) / (radius_deg * radius_deg))
+            out[nid] = float(np.sum(w * rv))
+        return out
+    except Exception as exc:
+        _log.warning("road-risk fusion failed, using synthetic fallback: %s", exc)
+        return _synthetic_road_risk_by_node(substrate)

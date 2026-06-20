@@ -16,8 +16,10 @@ from .toronto import (
     observed_counts_by_node,
     reset_bikeshare_demand_cache,
     reset_observed_counts_cache,
+    reset_road_risk_cache,
     reset_transit_supply_cache,
     reset_ttc_boardings_cache,
+    road_risk_by_node,
     transit_supply_by_node,
     ttc_boardings_by_node,
 )
@@ -38,4 +40,7 @@ __all__ = [
     # Transit supply (real GTFS evening departures) — a display overlay (ADR-0032).
     "transit_supply_by_node",
     "reset_transit_supply_cache",
+    # Road risk (real Vision Zero / KSI collisions) — a display overlay (ADR-0036).
+    "road_risk_by_node",
+    "reset_road_risk_cache",
 ]

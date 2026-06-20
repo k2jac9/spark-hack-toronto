@@ -28,6 +28,7 @@ from .event_surge import EventSurge
 from .fare_revenue import FareRevenueLens
 from .mobility_demand import MobilityDemandLens
 from .noise_livability import NoiseLivabilityLens
+from .road_risk import RoadRiskLens
 from .safety import SafetyLens
 from .transit_load import TransitLoadLens, transit_load_enabled
 from .weather import WeatherLens
@@ -50,6 +51,9 @@ __all__ = [
     # Data-driven DEMAND display lens (advisory-only, no levers, no cost — Fit C of the
     # roadmap, ADR-0030): Bike Share trip-origin "demand to leave" as a read-only overlay.
     "MobilityDemandLens",
+    # Data-driven ROAD-RISK display lens (advisory-only, no levers, no cost — Fit C of the
+    # roadmap, ADR-0036): Vision Zero / KSI collision history as a read-only danger overlay.
+    "RoadRiskLens",
     # Data-driven REAL source lens (opt-in, off by default, no levers, no cost — Fit C
     # of the roadmap, ADR-0029): measured TTC/TMC background ridership injected as load.
     "TransitLoadLens",
