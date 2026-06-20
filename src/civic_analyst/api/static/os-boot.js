@@ -14,7 +14,7 @@
  *       opts:
  *         onEnter   : function  — called right BEFORE resolving (kick off map fly-to / skyline rise).
  *         autoEnterMs: number   — if set, auto-trigger Enter after this many ms (unattended demos).
- *         tagline   : string    — override the tagline (default "One lever. Every lens.").
+ *         tagline   : string    — override the tagline (default "Turning urban data into real-time insight through AI").
  *         subline   : string    — override the small line under the tagline.
  *   OSBoot.skip() -> void
  *       Immediately remove the overlay and resolve any pending play() (Esc / impatient demos).
@@ -106,18 +106,18 @@
   }
 
   function build(opts) {
-    var tagline = esc(opts.tagline || "One lever. Every lens.");
-    var subline = esc(opts.subline || "Toronto · FIFA World Cup 2026 · running 100% on one box");
+    var tagline = esc(opts.tagline || "Turning urban data into real-time insight through AI");
+    var subline = esc(opts.subline || "Any city's open data → lenses of intelligence · Toronto first · 100% on-device");
     var root = document.createElement("div");
     root.id = "os-boot";
     root.setAttribute("role", "dialog");
-    root.setAttribute("aria-label", "Urban OS boot screen");
+    root.setAttribute("aria-label", "UrbanOS boot screen");
     root.innerHTML =
       '<div class="grid"></div><div class="scan"></div>' +
-      '<div class="mark">URBAN OS</div>' +
+      '<div class="mark">Urban<span class="os">OS</span></div>' +
       '<div class="tag">' + tagline + "</div>" +
       '<div class="sub">' + subline + "</div>" +
-      '<button class="enter" type="button" aria-label="Enter Urban OS">Enter ▶</button>' +
+      '<button class="enter" type="button" aria-label="Enter UrbanOS">Enter ▶</button>' +
       '<div class="hint">press Enter / Space &nbsp;·&nbsp; Esc to skip</div>';
     return root;
   }

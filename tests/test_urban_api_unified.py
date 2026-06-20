@@ -86,15 +86,15 @@ def test_civic_index_served_same_origin():
     with TestClient(app) as client:
         r = client.get("/civic/")
         assert r.status_code == 200
-        assert "Toronto Civic Risk Analyst" in r.text
+        assert "Risk lens" in r.text
 
 
 def test_root_serves_the_unified_shell():
-    """/ now serves the unified "Urban OS" shell (one canvas + a lens dock)."""
+    """/ now serves the unified "UrbanOS" shell (one canvas + a lens dock)."""
     with TestClient(app) as client:
         r = client.get("/")
         assert r.status_code == 200
-        assert "Urban OS" in r.text
+        assert "UrbanOS" in r.text
         assert "os-boot.js" in r.text          # the shell's boot module
         assert 'data-lens="city"' in r.text    # the lens dock is present
         assert "maplibre-gl" in r.text          # offline vendored asset, not a CDN

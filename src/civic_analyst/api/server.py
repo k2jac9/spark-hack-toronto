@@ -92,7 +92,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Toronto Civic Risk Analyst", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="UrbanOS — Risk lens (civic risk)", version="0.1.0", lifespan=lifespan)
 
 # Cross-origin requests are intentionally disallowed: this is a public, read-only
 # demo served same-origin behind the Tailscale Funnel, so no browser other-origin

@@ -1,4 +1,4 @@
-# Toronto Civic Risk Analyst + Urban-OS
+# UrbanOS — Turning urban data into real-time insight through AI
 
 [![CI](https://github.com/cyberqubit/spark-hack-toronto/actions/workflows/ci.yml/badge.svg)](https://github.com/cyberqubit/spark-hack-toronto/actions/workflows/ci.yml)
 
