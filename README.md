@@ -115,6 +115,24 @@ the tiny demo substrate — same as the Rust accelerator (ADR-0009).
 - **Rust core + 128 GB unified memory** — the full graph, live sim state, and the model
   coexist; the kernel steps at **N× real-time** (measure with `make urbanos-accel`).
 
+### Data-driven lenses (real Toronto counts, advisory)
+
+A parallel track grounds the kernel in **real Toronto TMC 15-min counts** — each piece is
+**opt-in + CPU-fallback**, so the headline numbers above never move unless you explicitly turn
+it on (see `docs/research/tpf-and-data-driven-lenses.md`):
+
+- **CongestionNowcast** *(Phase 1, advisory)* — scores the kernel's crowd profile against the
+  observed counts (scale-free shape agreement); no lever, no cost. Reported in `/lenses`.
+- **Learned-dynamics floor** *(Phase 2, ADR-0028, advisory)* — fits a velocity field from the
+  observed marginals and reports whether it beats the exact kernel at matching ground truth.
+  `URBANOS_LEARNED_DYNAMICS=1`; surfaced in the UI labelled *learned/approximate*, never a
+  headline number. (Phase 3 / TPF is a documented NO-GO — the win is purely gradient, not
+  rotational.)
+- **TransitLoad** *(Fit C, ADR-0029)* — injects the measured throughput as a **real** `source()`
+  (honest background ridership on top of the event egress). `URBANOS_TRANSIT_LOAD=1` /
+  `--transit-load`; off by default, no lever and no J term, so the exact kernel still prices
+  every person and the golden numbers are unchanged.
+
 Design decisions are recorded in [docs/adr/](docs/adr/).
 
 ---

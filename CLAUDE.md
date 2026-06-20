@@ -59,9 +59,26 @@ Layout: `src/civic_analyst/{ingest,graph,agents,api}`, `tests/`, `scripts/`, `de
 - Don't overscope. **One flawless demo > five half-features.**
 
 ## Current status (handoff — 2026-05-31, demo day)
+
+> **Post-hackathon R&D update (2026-06-20).** The data-driven roadmap
+> (`docs/research/tpf-and-data-driven-lenses.md`) is shipping phase-by-phase — every step
+> **opt-in + CPU-fallback + advisory**, so the **default demo numbers stay byte-identical**
+> (do-nothing **J $323,222** → best 14-min release **$105,050**, peak cut 67%). Landed:
+> **Phase 0** TMC 15-min ingest → **Phase 1** `CongestionNowcastLens` calibration (kernel-vs-
+> observed shape agreement, #94) → **Phase 2** learned-dynamics Action-Matching floor
+> (**ADR-0028**, #96), now surfaced in the `:8001` UI labelled *learned/approximate* (#98) →
+> **Fit C** `TransitLoadLens` (**ADR-0029**, #100): real measured Toronto throughput injected
+> as a `source()` (`URBANOS_TRANSIT_LOAD`, **off by default**, no lever / no J term; flag-on CLI
+> reads J $366,940 → $113,315, flag-off unchanged). **Phase 3 (TPF) is a documented NO-GO** —
+> the Phase-2 win is 100% gradient / 0% rotational, so the roadmap §8.4 gate is never met; the
+> next step is more Fit C lenses, not TPF. Supporting work merged: narrator-guard comma-form
+> fix (#95), idempotent `mcp_server.load` (#94), `make gpu-check-wsl` (#97), property/edge
+> tests for both data-driven modules (#99). **Suite now 529 passed / 1 skipped.** All honesty
+> invariants intact; the demo-day handoff below is still accurate (box remains deployed).
+
 **Full read for the next session:** `docs/HANDOFF.md` (@cyberqubit → @k2jac9), `docs/PITCH.md`
 (the pitch), `docs/ON_THE_BOX.md` (box runbook), `docs/video/` (submission video kit). A fresh
-clone builds + passes all tests (`make test` ≈ **439 green**). Everything below is **merged on
+clone builds + passes all tests (`make test` ≈ **529 green**). Everything below is **merged on
 `main` + CI-green**, and the **box is deployed on the live GPU stack** (see "GPU stack" below).
 
 **The project is two apps that share one architecture:**
