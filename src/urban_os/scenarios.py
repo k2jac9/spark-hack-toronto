@@ -13,6 +13,7 @@ that Economic populates (ADR-0007).
 from __future__ import annotations
 
 from .adapters import (
+    bikeshare_demand_by_node,
     civic_activity_by_node,
     civic_safety_by_node,
     observed_counts_by_node,
@@ -25,6 +26,7 @@ from .lenses import (
     EmsAccessLens,
     EventSurge,
     FareRevenueLens,
+    MobilityDemandLens,
     NoiseLivabilityLens,
     SafetyLens,
     TransitLoadLens,
@@ -112,11 +114,19 @@ def extra_display_lenses(sc=None) -> list:
     ``docs/research/tpf-and-data-driven-lenses.md``): advisory-only, no levers, no
     cost — it reports how well the kernel's crowd profile matches what was actually
     measured, and like the others is excluded from the optimizer's objective ``J``.
+
+    ``MobilityDemandLens`` is the data-driven *demand* display lens (Fit C, ADR-0030):
+    Bike Share trip origins ("demand to leave") lifted onto the substrate via
+    ``adapters.bikeshare_demand_by_node`` (synthetic fallback until a slice is committed).
+    It writes only its own ``bike_demand`` overlay — read-only on the crowd fields, no
+    lever, no cost — so it too is advisory-only and excluded from ``J``.
     """
     if sc is not None:
         noise = NoiseLivabilityLens(civic_activity_by_node(sc.substrate))
         nowcast = CongestionNowcastLens(observed_counts_by_node(sc.substrate))
+        mobility = MobilityDemandLens(bikeshare_demand_by_node(sc.substrate))
     else:
         noise = NoiseLivabilityLens()
         nowcast = CongestionNowcastLens()
-    return [EmsAccessLens(), EmissionsLens(), noise, FareRevenueLens(), nowcast]
+        mobility = MobilityDemandLens()
+    return [EmsAccessLens(), EmissionsLens(), noise, FareRevenueLens(), nowcast, mobility]

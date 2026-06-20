@@ -74,6 +74,16 @@ REGISTRY: dict[str, Dataset] = {
         geo="station / route",
         notes="Boardings (first point of payment) — a real source term for transit relays.",
     ),
+    "bikeshare": Dataset(
+        slug="bike-share-toronto-ridership-data",
+        title="Bike Share Toronto Ridership",
+        cadence="monthly",
+        geo="station",
+        notes="Anonymised trip OD + timestamps (900+ stations). Read here as ORIGINS-AS-"
+        "DEMAND: trip starts per station per 15-min bin = the local 'demand to leave' "
+        "field the MobilityDemand display lens (ADR-0030) lifts onto the substrate. "
+        "Synthetic-fallback until a committed bikeshare__*.csv slice lights it up.",
+    ),
 }
 
 

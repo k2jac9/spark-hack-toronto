@@ -9,10 +9,12 @@ from __future__ import annotations
 
 from .toronto import (
     Scenario,
+    bikeshare_demand_by_node,
     civic_activity_by_node,
     civic_safety_by_node,
     downtown_scenario,
     observed_counts_by_node,
+    reset_bikeshare_demand_cache,
     reset_observed_counts_cache,
 )
 
@@ -23,4 +25,7 @@ __all__ = [
     "civic_activity_by_node",
     "observed_counts_by_node",
     "reset_observed_counts_cache",
+    # Bike Share trip-origin demand (origins-as-demand) — the MobilityDemand grounding.
+    "bikeshare_demand_by_node",
+    "reset_bikeshare_demand_cache",
 ]

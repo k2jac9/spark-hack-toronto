@@ -405,3 +405,75 @@ def observed_counts_by_node(
     except Exception as exc:
         _log.warning("observed-count fusion failed, using synthetic fallback: %s", exc)
         return _synthetic_counts_by_node(substrate)
+
+
+# --- Bike Share demand series (origins-as-demand — the temporal twin, parallel to TMC) ---
+# A Bike Share trip *origin* is a local "demand to leave" event. Counting trip starts per
+# station per 15-min bin gives the same {node_id: {minute: count}} shape the TMC path
+# produces, lifted onto the substrate by the identical proximity kernel. It feeds the
+# MobilityDemand display lens (ADR-0030) — advisory only, never a headline number. There is
+# no committed Bike Share slice yet, so (like ttc_ridership) it runs on the deterministic
+# synthetic fallback until a real ``bikeshare__*.csv`` is committed; the real-data path is
+# wired here so that slice lights it up with no lens or kernel change.
+
+_BIKESHARE_DEMAND_CACHE: list | None = None
+
+
+def reset_bikeshare_demand_cache() -> None:
+    """Clear the cached Bike Share demand records (parity with the TMC/civic caches;
+    lets tests/long-running servers reset the process-global deterministically)."""
+    global _BIKESHARE_DEMAND_CACHE
+    _BIKESHARE_DEMAND_CACHE = None
+
+
+def _default_bikeshare_demand() -> list:
+    """Default Bike Share demand provider: the committed ``bikeshare__*.csv`` slice via
+    civic_analyst's time-series loader (``key="bikeshare"``), read ONCE and cached. No
+    slice committed today → empty list → callers fall back to a synthetic series. The only
+    place the adapter reaches into civic ingest for Bike Share counts; callers wanting
+    isolation inject their own provider."""
+    global _BIKESHARE_DEMAND_CACHE
+    if _BIKESHARE_DEMAND_CACHE is None:
+        from civic_analyst.ingest import timeseries
+
+        _BIKESHARE_DEMAND_CACHE = timeseries.load_counts(key="bikeshare")
+    return _BIKESHARE_DEMAND_CACHE
+
+
+def _synthetic_bikeshare_demand_by_node(substrate) -> dict[str, dict[float, float]]:
+    """Deterministic placeholder Bike Share demand series (no real data needed): an
+    earlier, sharper trip-origin bump per non-sink node (people deciding to leave *before*
+    the egress crowd peaks), scaled by node capacity, on a 15-min grid over the demo
+    window. Distinct shape from the TMC throughput fallback so the overlay reads as its own
+    signal; keeps Urban-OS standalone and tests offline."""
+    import numpy as np
+
+    cap = substrate.capacity.astype(float)
+    peak = float(np.where(~substrate.is_sink, cap, 0.0).max()) or 1.0
+    bins = [float(m) for m in range(0, 121, 15)]
+    center, width = 45.0, 18.0  # demand-to-leave leads the throughput peak (center 60)
+    out: dict[str, dict[float, float]] = {}
+    for i, nid in enumerate(substrate.ids):
+        scale = 0.0 if substrate.is_sink[i] else float(cap[i]) / peak
+        out[nid] = {
+            b: scale * 400.0 * float(np.exp(-0.5 * ((b - center) / width) ** 2))
+            for b in bins
+        }
+    return out
+
+
+def bikeshare_demand_by_node(
+    substrate, *, radius_deg: float = 0.0045, provider=None
+) -> dict[str, dict[float, float]]:
+    """Per-node Bike Share DEMAND series — trip origins ("demand to leave") per 15-min
+    bin, lifted onto the substrate by proximity, ``{node_id: {minute: count}}`` (parallel
+    to :func:`observed_counts_by_node`). Falls back to a deterministic synthetic series
+    when no Bike Share slice is present, so the MobilityDemand display lens still runs
+    offline (ADR-0030)."""
+    try:
+        return _observed_counts_by_node(
+            substrate, radius_deg=radius_deg, provider=provider or _default_bikeshare_demand
+        )
+    except Exception as exc:
+        _log.warning("bikeshare-demand fusion failed, using synthetic fallback: %s", exc)
+        return _synthetic_bikeshare_demand_by_node(substrate)
