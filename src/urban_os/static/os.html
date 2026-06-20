@@ -27,8 +27,8 @@
       background: linear-gradient(180deg, rgba(5,8,15,.92), rgba(5,8,15,0));
       pointer-events: none; }
     /* <h1> wordmark — reset the UA heading margins/size so it still reads as the bar logo. */
-    #wordmark { margin: 0; font-weight: 800; letter-spacing: .18em; font-size: 16px;
-      color: var(--text-strong); text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent); }
+    #wordmark { margin: 0; font-weight: 900; letter-spacing: .14em; font-size: 18px;
+      color: var(--text-strong); text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 60%, transparent); }
     #wordmark .os { color: var(--accent); }
     #scenario-tag { font-size: 12px; color: var(--text-soft); }
     #status { margin-left: auto; font-size: 12px; color: var(--text-muted);
@@ -39,15 +39,20 @@
     /* Lens dock — left rail (Hick's law: 4 lenses). */
     #dock { position: absolute; top: 50%; left: 14px; transform: translateY(-50%); z-index: 6;
       display: flex; flex-direction: column; gap: 10px; }
-    .lens { width: 78px; padding: 12px 6px; border-radius: var(--r-xl); cursor: pointer;
-      background: rgba(15,23,42,.72); border: 1px solid var(--border-2); color: var(--text-muted);
+    .lens { position: relative; width: 80px; padding: 13px 6px; border-radius: var(--r-xl); cursor: pointer;
+      background: var(--surface-2); border: 1px solid var(--border-2); color: var(--text-muted);
       display: flex; flex-direction: column; align-items: center; gap: 6px;
-      font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
-      backdrop-filter: blur(6px); transition: all .18s ease; }
-    .lens .ic { font-size: 22px; line-height: 1; }
-    .lens:hover { border-color: var(--border-hover); color: var(--text-soft); }
+      font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+      backdrop-filter: blur(6px); box-shadow: var(--shadow-1); transition: all .18s ease; }
+    .lens .ic { font-size: 23px; line-height: 1; filter: grayscale(.35) opacity(.85); transition: filter .18s; }
+    .lens:hover { border-color: var(--border-hover); color: var(--text-soft); transform: translateX(2px); }
+    .lens:hover .ic { filter: none; }
     .lens[aria-current="true"] { color: var(--text-strong); border-color: var(--accent);
-      background: var(--surface-sel); box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 40%, transparent); }
+      background: var(--surface-sel); box-shadow: var(--shadow-2), var(--shadow-glow); }
+    .lens[aria-current="true"] .ic { filter: none; }
+    /* signature: a left accent indicator on the active lens. */
+    .lens[aria-current="true"]::before { content: ""; position: absolute; left: -1px; top: 14px; bottom: 14px;
+      width: 3px; border-radius: var(--pill); background: var(--accent); box-shadow: 0 0 10px var(--accent); }
 
     /* Side panel — swaps per lens (<400ms, Doherty). */
     #panel { position: absolute; top: 64px; right: 14px; bottom: 14px; width: 34vw;
