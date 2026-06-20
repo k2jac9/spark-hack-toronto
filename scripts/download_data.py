@@ -15,8 +15,6 @@ from pathlib import Path
 # Allow running as a plain script without installing the package.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import httpx  # noqa: E402
-
 from civic_analyst.config import settings  # noqa: E402
 from civic_analyst.ingest.ckan import CKANClient  # noqa: E402
 from civic_analyst.ingest.datasets import REGISTRY  # noqa: E402
@@ -40,11 +38,8 @@ def download(keys: list[str]) -> None:
                     continue
                 dest = settings.data_dir / f"{key}__{res.get('name', res['id'])}.{fmt}"
                 try:
-                    with httpx.stream("GET", url, timeout=120, follow_redirects=True) as r:
-                        r.raise_for_status()
-                        with open(dest, "wb") as fh:
-                            for chunk in r.iter_bytes():
-                                fh.write(chunk)
+                    # Stream via the hardened client (retry/backoff + redirects).
+                    ckan.download_resource(res, dest)
                     print(f"  -> {dest.name}")
                 except Exception as exc:
                     print(f"  ! {url}: {exc}")
