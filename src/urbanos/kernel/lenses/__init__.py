@@ -27,6 +27,9 @@ from .ems_access import EmsAccessLens
 from .event_surge import EventSurge
 from .fare_revenue import FareRevenueLens
 from .mobility_demand import MobilityDemandLens
+from .bike_theft import BikeTheftLens
+from .emergency import EmergencyLens
+from .enforcement import EnforcementLens
 from .footfall import FootfallLens
 from .noise_livability import NoiseLivabilityLens
 from .road_disruption import RoadDisruptionLens
@@ -62,6 +65,15 @@ __all__ = [
     # Data-driven ROAD-DISRUPTION display lens (advisory-only, no levers, no cost — Fit C of the
     # roadmap, ADR-0038): active road closures / restrictions as a read-only disruption overlay.
     "RoadDisruptionLens",
+    # Data-driven ENFORCEMENT display lens (advisory-only — Fit C, ADR-0039): automated red-light
+    # + speed camera coverage as a read-only overlay.
+    "EnforcementLens",
+    # Data-driven BIKE-THEFT display lens (advisory-only — Fit C, ADR-0040): reported bicycle-theft
+    # density as a read-only theft overlay.
+    "BikeTheftLens",
+    # Data-driven EMERGENCY display lens (advisory-only — Fit C, ADR-0041): TFS fire-incident
+    # response density as a read-only response-load overlay.
+    "EmergencyLens",
     # Data-driven REAL source lens (opt-in, off by default, no levers, no cost — Fit C
     # of the roadmap, ADR-0029): measured TTC/TMC background ridership injected as load.
     "TransitLoadLens",

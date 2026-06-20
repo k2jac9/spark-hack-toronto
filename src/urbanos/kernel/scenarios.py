@@ -13,9 +13,12 @@ that Economic populates (ADR-0007).
 from __future__ import annotations
 
 from .adapters import (
+    bike_theft_by_node,
     bikeshare_demand_by_node,
     civic_activity_by_node,
     civic_safety_by_node,
+    emergency_by_node,
+    enforcement_by_node,
     footfall_by_node,
     observed_counts_by_node,
     road_disruption_by_node,
@@ -23,11 +26,14 @@ from .adapters import (
     ttc_boardings_by_node,
 )
 from .lenses import (
+    BikeTheftLens,
     BusinessFlow,
     CongestionNowcastLens,
     EconomicLens,
+    EmergencyLens,
     EmissionsLens,
     EmsAccessLens,
+    EnforcementLens,
     EventSurge,
     FareRevenueLens,
     FootfallLens,
@@ -158,6 +164,9 @@ def extra_display_lenses(sc=None) -> list:
         road_risk = RoadRiskLens(road_risk_by_node(sc.substrate))
         footfall = FootfallLens(footfall_by_node(sc.substrate))
         road_disruption = RoadDisruptionLens(road_disruption_by_node(sc.substrate))
+        enforcement = EnforcementLens(enforcement_by_node(sc.substrate))
+        bike_theft = BikeTheftLens(bike_theft_by_node(sc.substrate))
+        emergency = EmergencyLens(emergency_by_node(sc.substrate))
     else:
         noise = NoiseLivabilityLens()
         nowcast = CongestionNowcastLens()
@@ -165,5 +174,8 @@ def extra_display_lenses(sc=None) -> list:
         road_risk = RoadRiskLens()
         footfall = FootfallLens()
         road_disruption = RoadDisruptionLens()
+        enforcement = EnforcementLens()
+        bike_theft = BikeTheftLens()
+        emergency = EmergencyLens()
     return [EmsAccessLens(), EmissionsLens(), noise, FareRevenueLens(), nowcast, mobility,
-            road_risk, footfall, road_disruption]
+            road_risk, footfall, road_disruption, enforcement, bike_theft, emergency]

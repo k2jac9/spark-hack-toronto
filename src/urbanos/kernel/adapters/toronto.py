@@ -833,3 +833,220 @@ def road_disruption_by_node(
     except Exception as exc:
         _log.warning("road-disruption fusion failed, using synthetic fallback: %s", exc)
         return _synthetic_road_disruption_by_node(substrate)
+
+
+# --- automated-ENFORCEMENT overlay (real red-light + speed camera locations) -----------
+# Where RoadRisk shows where the road is HISTORICALLY dangerous (KSI) and RoadDisruption where it
+# is CURRENTLY constrained (closures), this shows where the city actively ENFORCES against
+# dangerous traffic: severity-weighted automated-enforcement devices (red-light + speed cameras)
+# fused onto the substrate as a static per-node coverage density (scripts/fetch_enforcement.py). A
+# display overlay (ADR-0039) — no lever, no J, never a headline number. Real/measured (real
+# geocoded devices, weighted red-light 2 / speed 1; the relative shape is the claim).
+
+ENFORCEMENT_PROVENANCE = "real/measured"
+_ENFORCEMENT_CACHE: list | None = None
+
+
+def reset_enforcement_cache() -> None:
+    """Clear the cached enforcement-device records (parity with the other ingest caches)."""
+    global _ENFORCEMENT_CACHE
+    _ENFORCEMENT_CACHE = None
+
+
+def _default_enforcement() -> list:
+    """Default provider: the committed real enforcement-device slice via the static-value loader
+    (``key="enforcement"``, severity as the value), read ONCE and cached. Empty when no slice is on
+    the loader's path → callers fall back to a synthetic field."""
+    global _ENFORCEMENT_CACHE
+    if _ENFORCEMENT_CACHE is None:
+        from urbanos.risk.ingest import timeseries
+
+        _ENFORCEMENT_CACHE = timeseries.load_station_values(key="enforcement", value_col="severity")
+    return _ENFORCEMENT_CACHE
+
+
+def _synthetic_enforcement_by_node(substrate) -> dict[str, float]:
+    """Deterministic placeholder enforcement-coverage density (no real data needed): busier, more
+    central intersections carry more automated enforcement. Offline-safe; clearly synthetic 0..1."""
+    import numpy as np
+
+    cap = substrate.capacity.astype(float)
+    base = np.where(~substrate.is_sink, np.sqrt(np.maximum(cap, 0.0)), 0.0)
+    peak = float(base.max()) or 1.0
+    return {nid: float(base[i] / peak) for i, nid in enumerate(substrate.ids)}
+
+
+def enforcement_by_node(
+    substrate, *, radius_deg: float = 0.0045, provider=None
+) -> dict[str, float]:
+    """Per-node automated-enforcement coverage density — severity-weighted red-light + speed camera
+    records lifted onto the substrate by a Gaussian proximity-weighted SUM (``{node_id: density}``),
+    a static overlay. Raw non-negative values (the lens/caller normalises 0..1). Synthetic fallback
+    when no slice is present (offline-safe, ADR-0039)."""
+    import numpy as np
+
+    try:
+        recs = (provider or _default_enforcement)()
+        recs = [r for r in recs if r.get("lat") is not None and r.get("lng") is not None]
+        if not recs:
+            raise RuntimeError("no enforcement-device records loaded")
+        rl = np.array([r["lat"] for r in recs], dtype=float)
+        ro = np.array([r["lng"] for r in recs], dtype=float)
+        rv = np.array([float(r["value"]) for r in recs], dtype=float)
+        out: dict[str, float] = {}
+        for i, nid in enumerate(substrate.ids):
+            if substrate.is_sink[i]:
+                out[nid] = 0.0
+                continue
+            la, lo = float(substrate.lat[i]), float(substrate.lng[i])
+            dlat = rl - la
+            dlng = (ro - lo) * np.cos(np.radians(la))
+            w = np.exp(-(dlat * dlat + dlng * dlng) / (radius_deg * radius_deg))
+            out[nid] = float(np.sum(w * rv))
+        return out
+    except Exception as exc:
+        _log.warning("enforcement fusion failed, using synthetic fallback: %s", exc)
+        return _synthetic_enforcement_by_node(substrate)
+
+
+# --- bike-THEFT overlay (real reported bicycle-theft density) -------------------------
+# Where bikes actually get stolen: reported bicycle-theft records fused onto the substrate as a
+# static per-node theft density (scripts/fetch_bike_theft.py). A property-crime / cycling-safety
+# axis — pairs with the bike-demand (MobilityDemand) + footfall lenses. A display overlay
+# (ADR-0040) — no lever, no J, never a headline number. Real/measured (geocoded thefts, severity
+# uniformly 1 — a count density; the relative shape is the claim).
+
+BIKE_THEFT_PROVENANCE = "real/measured"
+_BIKE_THEFT_CACHE: list | None = None
+
+
+def reset_bike_theft_cache() -> None:
+    """Clear the cached bicycle-theft records (parity with the other ingest caches)."""
+    global _BIKE_THEFT_CACHE
+    _BIKE_THEFT_CACHE = None
+
+
+def _default_bike_theft() -> list:
+    """Default provider: the committed real bicycle-theft slice via the static-value loader
+    (``key="bike_theft"``, severity as the value), read ONCE and cached. Empty → synthetic."""
+    global _BIKE_THEFT_CACHE
+    if _BIKE_THEFT_CACHE is None:
+        from urbanos.risk.ingest import timeseries
+
+        _BIKE_THEFT_CACHE = timeseries.load_station_values(key="bike_theft", value_col="severity")
+    return _BIKE_THEFT_CACHE
+
+
+def _synthetic_bike_theft_by_node(substrate) -> dict[str, float]:
+    """Deterministic placeholder bike-theft density: busier, more central intersections see more
+    bikes parked and so more thefts. Offline-safe; clearly synthetic 0..1."""
+    import numpy as np
+
+    cap = substrate.capacity.astype(float)
+    base = np.where(~substrate.is_sink, np.sqrt(np.maximum(cap, 0.0)), 0.0)
+    peak = float(base.max()) or 1.0
+    return {nid: float(base[i] / peak) for i, nid in enumerate(substrate.ids)}
+
+
+def bike_theft_by_node(
+    substrate, *, radius_deg: float = 0.0045, provider=None
+) -> dict[str, float]:
+    """Per-node bike-theft density — reported bicycle-theft records lifted onto the substrate by a
+    Gaussian proximity-weighted SUM (``{node_id: density}``), a static overlay. Raw non-negative
+    values (the lens/caller normalises 0..1). Synthetic fallback offline (ADR-0040)."""
+    import numpy as np
+
+    try:
+        recs = (provider or _default_bike_theft)()
+        recs = [r for r in recs if r.get("lat") is not None and r.get("lng") is not None]
+        if not recs:
+            raise RuntimeError("no bicycle-theft records loaded")
+        rl = np.array([r["lat"] for r in recs], dtype=float)
+        ro = np.array([r["lng"] for r in recs], dtype=float)
+        rv = np.array([float(r["value"]) for r in recs], dtype=float)
+        out: dict[str, float] = {}
+        for i, nid in enumerate(substrate.ids):
+            if substrate.is_sink[i]:
+                out[nid] = 0.0
+                continue
+            la, lo = float(substrate.lat[i]), float(substrate.lng[i])
+            dlat = rl - la
+            dlng = (ro - lo) * np.cos(np.radians(la))
+            w = np.exp(-(dlat * dlat + dlng * dlng) / (radius_deg * radius_deg))
+            out[nid] = float(np.sum(w * rv))
+        return out
+    except Exception as exc:
+        _log.warning("bike-theft fusion failed, using synthetic fallback: %s", exc)
+        return _synthetic_bike_theft_by_node(substrate)
+
+
+# --- EMERGENCY overlay (real Toronto Fire Services incident-response density) -----------
+# Where EMS-access shows where blocked roads make help slow to ARRIVE, this shows where the city's
+# emergency-response load is CALLED most often: TFS fire-incident *responses* (which include alarm
+# activations + outdoor fires, NOT only structure fires) fused onto the substrate as a static
+# per-node response-load density (scripts/fetch_fire_incidents.py). A display overlay (ADR-0041) —
+# no lever, no J, never a headline number. Real/measured (a response-LOAD signal, not a fire count).
+
+EMERGENCY_PROVENANCE = "real/measured"
+_EMERGENCY_CACHE: list | None = None
+
+
+def reset_emergency_cache() -> None:
+    """Clear the cached fire-incident records (parity with the other ingest caches)."""
+    global _EMERGENCY_CACHE
+    _EMERGENCY_CACHE = None
+
+
+def _default_emergency() -> list:
+    """Default provider: the committed real TFS fire-incident slice via the static-value loader
+    (``key="emergency"``, severity as the value), read ONCE and cached. Empty → synthetic."""
+    global _EMERGENCY_CACHE
+    if _EMERGENCY_CACHE is None:
+        from urbanos.risk.ingest import timeseries
+
+        _EMERGENCY_CACHE = timeseries.load_station_values(key="emergency", value_col="severity")
+    return _EMERGENCY_CACHE
+
+
+def _synthetic_emergency_by_node(substrate) -> dict[str, float]:
+    """Deterministic placeholder emergency-response density: busier, more central intersections
+    carry more incident responses. Offline-safe; clearly synthetic 0..1."""
+    import numpy as np
+
+    cap = substrate.capacity.astype(float)
+    base = np.where(~substrate.is_sink, np.sqrt(np.maximum(cap, 0.0)), 0.0)
+    peak = float(base.max()) or 1.0
+    return {nid: float(base[i] / peak) for i, nid in enumerate(substrate.ids)}
+
+
+def emergency_by_node(
+    substrate, *, radius_deg: float = 0.0045, provider=None
+) -> dict[str, float]:
+    """Per-node emergency-response density — severity-weighted TFS fire-incident responses lifted
+    onto the substrate by a Gaussian proximity-weighted SUM (``{node_id: density}``), a static
+    overlay. Raw non-negative values (the lens/caller normalises 0..1). Synthetic fallback offline
+    (ADR-0041)."""
+    import numpy as np
+
+    try:
+        recs = (provider or _default_emergency)()
+        recs = [r for r in recs if r.get("lat") is not None and r.get("lng") is not None]
+        if not recs:
+            raise RuntimeError("no fire-incident records loaded")
+        rl = np.array([r["lat"] for r in recs], dtype=float)
+        ro = np.array([r["lng"] for r in recs], dtype=float)
+        rv = np.array([float(r["value"]) for r in recs], dtype=float)
+        out: dict[str, float] = {}
+        for i, nid in enumerate(substrate.ids):
+            if substrate.is_sink[i]:
+                out[nid] = 0.0
+                continue
+            la, lo = float(substrate.lat[i]), float(substrate.lng[i])
+            dlat = rl - la
+            dlng = (ro - lo) * np.cos(np.radians(la))
+            w = np.exp(-(dlat * dlat + dlng * dlng) / (radius_deg * radius_deg))
+            out[nid] = float(np.sum(w * rv))
+        return out
+    except Exception as exc:
+        _log.warning("emergency fusion failed, using synthetic fallback: %s", exc)
+        return _synthetic_emergency_by_node(substrate)

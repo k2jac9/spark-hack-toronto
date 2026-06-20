@@ -309,6 +309,67 @@ def road_disruption_report(lenses, result) -> dict:
     }
 
 
+def _static_overlay(lenses, n: int, name: str) -> np.ndarray:
+    """Shared reader for the static-density display lenses (RoadRisk family, ADR-0036/0038/0039/
+    0040/0041): return the lens's baked, already-normalised ``(N,)`` ``_risk`` field, or all-zeros
+    when the lens is absent/inert. Display-only — prices nothing, cannot move ``J``."""
+    out = np.zeros(int(n), dtype=float)
+    lens = next((ln for ln in lenses if ln.name == name), None)
+    risk = getattr(lens, "_risk", None) if lens is not None else None
+    if risk is None:
+        return out
+    a = np.asarray(risk, dtype=float)
+    if a.shape == out.shape:
+        out = np.maximum(0.0, a)
+    np.nan_to_num(out, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+    return out
+
+
+def _exposure_report(lenses, result, name: str, series: str) -> dict:
+    """Shared run-level advisory report for the static-density lenses: peak/mean of the lens's
+    crush-overlap cosine over the steps it was active. No lever, no ``J`` — never a headline."""
+    lens = next((ln for ln in lenses if ln.name == name), None)
+    exposure = [float(v) for v in result.series(series)]
+    if lens is None or not exposure:
+        return {"available": False, "peak_exposure": 0.0, "mean_exposure": 0.0}
+    return {
+        "available": True,
+        "peak_exposure": _r(max(exposure), 3),
+        "mean_exposure": _r(sum(exposure) / len(exposure), 3),
+    }
+
+
+def enforcement_overlay(lenses, n: int) -> np.ndarray:
+    """Per-node automated-enforcement coverage density for the map overlay (Fit C, ADR-0039)."""
+    return _static_overlay(lenses, n, "enforcement")
+
+
+def enforcement_report(lenses, result) -> dict:
+    """Run-level Enforcement advisory (Fit C, ADR-0039): crush × enforcement-coverage overlap."""
+    return _exposure_report(lenses, result, "enforcement", "crush_enforcement_exposure")
+
+
+def bike_theft_overlay(lenses, n: int) -> np.ndarray:
+    """Per-node reported bicycle-theft density for the map overlay (Fit C, ADR-0040)."""
+    return _static_overlay(lenses, n, "bike_theft")
+
+
+def bike_theft_report(lenses, result) -> dict:
+    """Run-level BikeTheft advisory (Fit C, ADR-0040): crush × bike-theft-hotspot overlap."""
+    return _exposure_report(lenses, result, "bike_theft", "crush_bike_theft_exposure")
+
+
+def emergency_overlay(lenses, n: int) -> np.ndarray:
+    """Per-node TFS emergency-response density for the map overlay (Fit C, ADR-0041)."""
+    return _static_overlay(lenses, n, "emergency")
+
+
+def emergency_report(lenses, result) -> dict:
+    """Run-level Emergency advisory (Fit C, ADR-0041): crush × incident-response-load overlap
+    (responses include alarms — a response-LOAD signal, not a structure-fire count)."""
+    return _exposure_report(lenses, result, "emergency", "crush_emergency_exposure")
+
+
 def four_lens_stack(sc):
     """The full four-lens stack (transit + economic + civic safety + business)."""
     return default_lens_stack(sc, safety=True, business=True)

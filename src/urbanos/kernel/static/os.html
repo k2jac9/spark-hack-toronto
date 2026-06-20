@@ -460,7 +460,8 @@
   // with lens show/hide and adds no new map layers.
   const LAYER_NAMES = { crush:'Live crush', ems_access:'EMS access', residential:'Civic activity',
     emissions:'Idling emissions', bike_demand:'Bike-share demand', transit_supply:'Transit supply',
-    road_risk:'Road risk (KSI)', footfall:'Footfall', road_disruption:'Road disruption' };
+    road_risk:'Road risk (KSI)', footfall:'Footfall', road_disruption:'Road disruption',
+    enforcement:'Enforcement', bike_theft:'Bike theft', emergency:'Emergency' };
   async function setOverlay(key) {
     CUR_LAYER = key;
     const box = document.getElementById('maplayers');
@@ -794,7 +795,10 @@
                          ['emissions','Emissions','Idling-emissions hotspot (do-nothing baseline)'],
                          ['road_risk','Road risk','Vision Zero / KSI collision history — where the road is historically dangerous (real, advisory)'],
                          ['footfall','Footfall','Ambient TMC pedestrian volume — where people already are on foot (advisory)'],
-                         ['road_disruption','Disruption','Active road closures / restrictions — where the network is currently constrained (real, advisory)']]],
+                         ['road_disruption','Disruption','Active road closures / restrictions — where the network is currently constrained (real, advisory)'],
+                         ['enforcement','Enforce','Automated red-light + speed camera coverage — where the city actively enforces dangerous traffic (real, advisory)'],
+                         ['bike_theft','Bike theft','Reported bicycle thefts — where bikes get stolen (real, advisory)'],
+                         ['emergency','Emergency','Toronto Fire Services incident-response density — where response load concentrates (includes alarms; real, advisory)']]],
              ['Demand',[['bike_demand','Bike','Bike Share trip-origin demand — where people want to leave (advisory)']]],
              ['Supply',[['transit_supply','Transit','Scheduled evening transit departures near each node — real GTFS (advisory)']]]]
               .map(([g,btns])=>'<span class="mlg"><span class="mlg-l">'+g+'</span><span class="mlg-btns">'+
@@ -1151,6 +1155,28 @@
     '</div>';
   }
 
+  // Enforcement / Bike-theft / Emergency advisories (Fit C, ADR-0039/0040/0041): each a
+  // crush-overlap cosine vs a fixed real field. Reuse the .learned advisory card. '' when
+  // unavailable. Display-only — prices nothing, never a headline.
+  function _exposureCard(d, title, prov, hint) {
+    if (!d || !d.available) return '';
+    const f3 = (x) => Number(x || 0).toFixed(3);
+    return '<div class="learned">'+
+      '<div class="k">'+title+'<span class="prov">'+prov+'</span></div>'+
+      '<div class="fits">'+
+        '<div class="fit"><div class="lbl">Peak exposure</div><div class="num">'+f3(d.peak_exposure)+'</div></div>'+
+        '<div class="fit"><div class="lbl">Mean exposure</div><div class="num">'+f3(d.mean_exposure)+'</div></div>'+
+      '</div>'+
+      '<p class="hint">'+hint+' Advisory only; prices nothing.</p>'+
+    '</div>';
+  }
+  const enforcementHTML = (e) => _exposureCard(e, 'Enforcement coverage', 'cameras · advisory',
+    'Overlap (cosine, 0–1) of the egress crush with actively enforced corridors (red-light + speed cameras).');
+  const bikeTheftHTML = (b) => _exposureCard(b, 'Bike-theft exposure', 'theft · advisory',
+    'Overlap (cosine, 0–1) of the egress crush with reported bicycle-theft hotspots — lower is safer.');
+  const emergencyHTML = (e) => _exposureCard(e, 'Emergency load', 'fire/EMS · advisory',
+    'Overlap (cosine, 0–1) of the egress crush with high TFS incident-response areas (includes alarms) — lower is safer.');
+
   async function runOptimize(e) {
     const btn = e ? e.target : null;
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Searching levers…'; }
@@ -1202,7 +1228,10 @@
         mobilityDemandHTML(l && l.mobility_demand) +
         roadRiskHTML(l && l.road_risk) +
         footfallHTML(l && l.footfall) +
-        roadDisruptionHTML(l && l.road_disruption);
+        roadDisruptionHTML(l && l.road_disruption) +
+        enforcementHTML(l && l.enforcement) +
+        bikeTheftHTML(l && l.bike_theft) +
+        emergencyHTML(l && l.emergency);
       if (out) out.innerHTML = card;
       // Animate the City meters to the optimum (same /lenses source as the ripple).
       if (l && document.getElementById('combined')) {

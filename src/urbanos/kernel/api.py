@@ -53,6 +53,12 @@ from urbanos.kernel.services import (
     four_lens_J as _four_lens_J,
     four_lens_stack as _four_lens_stack,
     learned_dynamics_report as _learned_dynamics_report,
+    bike_theft_overlay as _bike_theft_overlay,
+    bike_theft_report as _bike_theft_report,
+    emergency_overlay as _emergency_overlay,
+    emergency_report as _emergency_report,
+    enforcement_overlay as _enforcement_overlay,
+    enforcement_report as _enforcement_report,
     footfall_overlay as _footfall_overlay,
     footfall_report as _footfall_report,
     mobility_demand_overlay as _mobility_demand_overlay,
@@ -405,6 +411,11 @@ def lenses_endpoint(
             # RoadDisruption advisory (Fit C, ADR-0038): the crush-disruption-exposure signal
             # (peak/mean) — how much the egress crush overlaps actively restricted places.
             "road_disruption": _road_disruption_report(extra, current),
+            # Enforcement / Bike-theft / Emergency advisories (Fit C, ADR-0039/0040/0041): each a
+            # crush-overlap cosine (peak/mean). Display-only, no dollars, no lever, never a headline.
+            "enforcement": _enforcement_report(extra, current),
+            "bike_theft": _bike_theft_report(extra, current),
+            "emergency": _emergency_report(extra, current),
             "benefit_definitions": BENEFIT_DEFINITIONS,
         }
     )
@@ -454,14 +465,20 @@ def overlays_endpoint() -> dict:
     # Road DISRUPTION: severity-weighted active road closures/restrictions fused per node (ADR-0038)
     # — where the network is currently constrained. Static + advisory; synthetic fallback offline.
     roaddis = _road_disruption_overlay(extra, sub.n)
+    # Enforcement (ADR-0039) / Bike-theft (ADR-0040) / Emergency (ADR-0041): static advisory
+    # densities fused per node; synthetic fallback offline.
+    enforce = _enforcement_overlay(extra, sub.n)
+    biketheft = _bike_theft_overlay(extra, sub.n)
+    emergency = _emergency_overlay(extra, sub.n)
 
     def _norm(a):
         m = float(a.max())
         return a / m if m > 0 else a
 
-    ems_n, resid_n, emit_n, bike_n, supply_n, roadrisk_n, footfall_n, roaddis_n = (
+    (ems_n, resid_n, emit_n, bike_n, supply_n, roadrisk_n, footfall_n, roaddis_n,
+     enforce_n, biketheft_n, emergency_n) = (
         _norm(ems), _norm(resid), _norm(emit), _norm(bike), _norm(supply), _norm(roadrisk),
-        _norm(footfall), _norm(roaddis),
+        _norm(footfall), _norm(roaddis), _norm(enforce), _norm(biketheft), _norm(emergency),
     )
     nodes = [
         {
@@ -476,6 +493,9 @@ def overlays_endpoint() -> dict:
             "road_risk": _r(float(roadrisk_n[i]), 3),
             "footfall": _r(float(footfall_n[i]), 3),
             "road_disruption": _r(float(roaddis_n[i]), 3),
+            "enforcement": _r(float(enforce_n[i]), 3),
+            "bike_theft": _r(float(biketheft_n[i]), 3),
+            "emergency": _r(float(emergency_n[i]), 3),
         }
         for i in range(sub.n)
     ]
