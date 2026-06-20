@@ -28,6 +28,15 @@
   /* radius + rhythm */
   --r-sm:4px; --r:6px; --r-lg:8px; --r-xl:10px; --pill:999px; --pad:16px;
   --num: ui-monospace, "Cascadia Code", monospace;
+  /* spacing scale (consistent rhythm across both apps) */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
+  /* elevation — soft depth so cards/panels lift off the map (additive; pages opt in) */
+  --shadow-1:0 1px 2px rgba(2,6,15,.45);
+  --shadow-2:0 6px 18px rgba(2,6,15,.45), 0 2px 6px rgba(2,6,15,.35);
+  --shadow-3:0 14px 40px rgba(2,6,15,.55), 0 4px 12px rgba(2,6,15,.4);
+  --shadow-glow:0 0 22px color-mix(in srgb, var(--accent) 30%, transparent);
+  /* heat ramp for overlay legends (low -> high) */
+  --heat-1:#1e293b; --heat-2:var(--accent); --heat-3:var(--risk-medium); --heat-4:var(--risk-high);
 }
 
 /* ===== Cyber theme = re-point the tokens (the system does the rest). The
@@ -42,4 +51,9 @@ html[data-theme="cyber"] {
   --verify:#00e5ff; --verify-border:#00e5ff; --verify-bg-idle:#00e5ff14;
   --verify-bg:#00e5ff26; --verify-text:#eaffff;
   --ev-permit:#00e5ff; --ev-permit-kind:#aef6ff; --ev-inspection:#ff3b6b;
+  /* cyber elevation — deeper shadow + a stronger accent glow */
+  --shadow-1:0 1px 2px rgba(0,0,0,.6);
+  --shadow-2:0 6px 20px rgba(0,0,0,.6), 0 0 18px color-mix(in srgb, var(--accent) 16%, transparent);
+  --shadow-3:0 16px 44px rgba(0,0,0,.7), 0 0 26px color-mix(in srgb, var(--accent) 22%, transparent);
+  --shadow-glow:0 0 26px color-mix(in srgb, var(--accent) 45%, transparent);
 }

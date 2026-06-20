@@ -54,7 +54,7 @@
       min-width: 360px; max-width: 460px; z-index: 6; overflow-y: auto;
       background: rgba(15,23,42,.82); border: 1px solid var(--border-2); border-radius: var(--r-xl);
       padding: 16px 18px; backdrop-filter: blur(10px);
-      box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+      box-shadow: var(--shadow-3); }
     #panel.swap { animation: swap .28s ease; }
     @keyframes swap { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
     /* .ptitle is an <h2> (per-lens section heading); the class keeps its visual size. */
@@ -69,7 +69,7 @@
 
     /* The cross-domain "every lens" meters. */
     .meters { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; }
-    .meter { background: var(--surface-2); border: 1px solid var(--border-2); border-radius: var(--r-lg); padding: 10px 12px; }
+    .meter { background: var(--surface-2); border: 1px solid var(--border-2); border-radius: var(--r-lg); padding: 10px 12px; box-shadow: var(--shadow-1); }
     .meter .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); display: flex; justify-content: space-between; }
     .meter .v { font-size: 20px; font-weight: 800; margin-top: 2px; }
     .bar { height: 6px; border-radius: var(--pill); background: #0b1626; margin-top: 8px; overflow: hidden; }
@@ -81,14 +81,24 @@
     .bar.emissions > span { background: #8a8f98; }
     .bar.noise > span { background: #c084fc; }
     .bar.fare > span { background: #34d399; }
-    .maplayers { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-    .maplayers .mll { font-size: 11px; opacity: .7; text-transform: uppercase; letter-spacing: .04em; }
+    .maplayers { display: flex; align-items: flex-end; gap: 8px 12px; flex-wrap: wrap; margin-top: 12px; }
+    .maplayers .mll { font-size: 11px; opacity: .7; text-transform: uppercase; letter-spacing: .04em; width: 100%; margin-bottom: 2px; }
+    .mlg { display: flex; flex-direction: column; gap: 4px; }
+    .mlg-l { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); }
+    .mlg-btns { display: flex; gap: 5px; }
     .mlb { font: inherit; font-size: 12px; padding: 3px 9px; border-radius: var(--pill);
-      border: 1px solid var(--surface-sel); background: var(--surface-2); color: inherit; cursor: pointer; }
-    .mlb.on { background: var(--accent); color: #00111e; border-color: var(--accent); font-weight: 700; }
+      border: 1px solid var(--surface-sel); background: var(--surface-2); color: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+    .mlb:hover { border-color: var(--border-hover); }
+    .mlb.on { background: var(--accent); color: #00111e; border-color: var(--accent); font-weight: 700; box-shadow: var(--shadow-glow); }
+    /* Overlay legend: active-layer name + a low→high heat scale. */
+    .legend { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 10px; color: var(--text-dim); }
+    .legend .lg-name { color: var(--text-soft); font-size: 11px; font-weight: 700; }
+    .legend .lg-end { text-transform: uppercase; letter-spacing: .06em; }
+    .legend .lg-bar { flex: 1; height: 8px; border-radius: var(--pill);
+      background: linear-gradient(90deg, var(--heat-1), var(--heat-2), var(--heat-3), var(--heat-4)); }
     .combined { margin-top: 12px; padding: 14px; border-radius: var(--r-lg);
       background: linear-gradient(135deg, var(--surface-sel), var(--surface-2));
-      border: 1px solid var(--accent); text-align: center; }
+      border: 1px solid var(--accent); text-align: center; box-shadow: var(--shadow-2), var(--shadow-glow); }
     .combined .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-text); }
     .combined .v { font-size: 38px; font-weight: 800; color: var(--risk-none);
       text-shadow: 0 0 18px color-mix(in srgb, var(--risk-none) 45%, transparent); }
@@ -379,10 +389,14 @@
   // Switch the City heatmap between the live crush ripple and a static intelligence
   // overlay. Reuses the existing os-heatmap (just changes node weight) so it composes
   // with lens show/hide and adds no new map layers.
+  const LAYER_NAMES = { crush:'Live crush', ems_access:'EMS access', residential:'Civic activity',
+    emissions:'Idling emissions', bike_demand:'Bike-share demand', transit_supply:'Transit supply' };
   async function setOverlay(key) {
     CUR_LAYER = key;
     const box = document.getElementById('maplayers');
     if (box) box.querySelectorAll('.mlb').forEach(b => b.classList.toggle('on', b.dataset.layer === key));
+    const nm = document.getElementById('lg-name');
+    if (nm) nm.textContent = LAYER_NAMES[key] || key;
     if (key !== 'crush' && !OVERLAYS_BYID) {
       try {
         const d = await (await fetch('/overlays')).json();
@@ -687,16 +701,23 @@
             meterHTML('ems','EMS access blocked','—')+meterHTML('emissions','Idling emissions','—')+
             meterHTML('noise','Residential noise','—')+meterHTML('fare','Fares at risk','—')+'</div>'+
           // Map-heat layer toggle: paint the heatmap by the live crush or by an
-          // intelligence overlay (EMS access · Activity · Emissions · Bike demand)
-          // from /overlays. Bike demand is advisory (peak Bike Share trip-origin
-          // "demand to leave" — synthetic until a real slice is committed, ADR-0030).
+          // intelligence overlay, grouped Live · Context · Demand · Supply (the data
+          // story: where the crush is, plus the demand sources and the transit supply).
+          // The demand/supply overlays are advisory (display-only, never priced). A
+          // legend below shows the low→high heat scale + the active layer.
           '<div class="maplayers" id="maplayers"><span class="mll">Map heat</span>'+
-            [['crush','Crush',''],['ems_access','EMS',''],['residential','Activity',''],
-             ['emissions','Emissions',''],
-             ['bike_demand','Bike demand','Advisory: peak Bike Share trip-origin demand (demand to leave) · display-only, never priced'],
-             ['transit_supply','Transit supply','Real (GTFS): scheduled evening transit departures near each node · display-only, never priced']]
-              .map(([k,t,tip])=>'<button class="mlb'+(k==='crush'?' on':'')+'" data-layer="'+k+'" type="button"'+(tip?' title="'+esc(tip)+'"':'')+'>'+t+'</button>').join('')+
+            [['Live',[['crush','Crush','The live post-event crush ripple (load ÷ capacity)']]],
+             ['Context',[['ems_access','EMS','EMS-access criticality per node'],
+                         ['residential','Activity','Civic activity — building permits + business licences'],
+                         ['emissions','Emissions','Idling-emissions hotspot (do-nothing baseline)']]],
+             ['Demand',[['bike_demand','Bike','Bike Share trip-origin demand — where people want to leave (advisory)']]],
+             ['Supply',[['transit_supply','Transit','Scheduled evening transit departures near each node — real GTFS (advisory)']]]]
+              .map(([g,btns])=>'<span class="mlg"><span class="mlg-l">'+g+'</span><span class="mlg-btns">'+
+                btns.map(([k,t,tip])=>'<button class="mlb'+(k==='crush'?' on':'')+'" data-layer="'+k+'" type="button" title="'+esc(tip)+'">'+t+'</button>').join('')+
+              '</span></span>').join('')+
           '</div>'+
+          '<div class="legend" id="legend"><span class="lg-name" id="lg-name">Live crush</span>'+
+            '<span class="lg-end">low</span><span class="lg-bar"></span><span class="lg-end">high</span></div>'+
           // F-4: the headline used to show three unexplained dollar figures. Now the
           // big number is cross_domain_benefit, LABELLED "cross-domain (additive)" with
           // its ADR-0019 definition on hover; the conservative single-objective J avoided
