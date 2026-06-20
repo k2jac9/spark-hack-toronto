@@ -173,9 +173,13 @@ def test_overlays_endpoint_returns_normalized_node_fields():
     nodes = r.json()["nodes"]
     assert len(nodes) > 0
     for o in nodes:
-        assert {"id", "lat", "lng", "ems_access", "residential", "emissions"} <= set(o)
-        for k in ("ems_access", "residential", "emissions"):
+        assert {
+            "id", "lat", "lng", "ems_access", "residential", "emissions", "bike_demand"
+        } <= set(o)
+        for k in ("ems_access", "residential", "emissions", "bike_demand"):
             assert 0.0 <= o[k] <= 1.0
-    # normalised 0..1 → each field peaks at exactly 1.0 on its hottest node.
-    for k in ("ems_access", "residential", "emissions"):
+    # normalised 0..1 → each field peaks at exactly 1.0 on its hottest node. (The
+    # MobilityDemand overlay runs on a synthetic fallback in tests, so it too has a
+    # nonzero peak; it returns all-zeros gracefully only when the lens is inert.)
+    for k in ("ems_access", "residential", "emissions", "bike_demand"):
         assert max(o[k] for o in nodes) == 1.0

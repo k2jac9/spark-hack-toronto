@@ -53,6 +53,7 @@ from urban_os.services import (
     four_lens_J as _four_lens_J,
     four_lens_stack as _four_lens_stack,
     learned_dynamics_report as _learned_dynamics_report,
+    mobility_demand_overlay as _mobility_demand_overlay,
 )
 
 # The civic address-risk app, mounted same-origin at /civic so the unified shell
@@ -388,10 +389,12 @@ def lenses_endpoint(
 @app.get("/overlays")
 def overlays_endpoint() -> dict:
     """Per-node static intelligence overlays for the map's layer toggle: EMS-access
-    criticality, civic Activity (the noise/livability grounding), and a do-nothing
-    emissions hotspot. One cheap baseline sim; every field normalised 0..1 so the
-    client can drive the heatmap weight directly. Static (lever-independent) by
-    design — these are *where* each domain is exposed, not the live ripple."""
+    criticality, civic Activity (the noise/livability grounding), a do-nothing
+    emissions hotspot, and Bike Share trip-origin demand (peak demand-to-leave, the
+    MobilityDemand advisory overlay). One cheap baseline sim; every field normalised
+    0..1 so the client can drive the heatmap weight directly. Static (lever-
+    independent) by design — these are *where* each domain is exposed, not the live
+    ripple. The bike-demand field is advisory/display-only (no lever, no J)."""
     sc = _scenario()
     extra = _extra_display_lenses(sc)
     stack = default_lens_stack(sc, weather=True) + extra
@@ -411,12 +414,16 @@ def overlays_endpoint() -> dict:
     emit = np.zeros(sub.n)
     for fr in res.frames:
         emit = np.maximum(emit, np.maximum(0.0, np.asarray(fr["load"]) - sub.capacity))
+    # Bike Share trip-origin demand: the peak-over-time of the MobilityDemand lens's
+    # own advisory ``bike_demand`` overlay (the lens was configured by the run above).
+    # All-zeros when the lens is inert (no slice) — never errors (ADR-0030).
+    bike = _mobility_demand_overlay(extra, sub.n)
 
     def _norm(a):
         m = float(a.max())
         return a / m if m > 0 else a
 
-    ems_n, resid_n, emit_n = _norm(ems), _norm(resid), _norm(emit)
+    ems_n, resid_n, emit_n, bike_n = _norm(ems), _norm(resid), _norm(emit), _norm(bike)
     nodes = [
         {
             "id": sub.ids[i],
@@ -425,6 +432,7 @@ def overlays_endpoint() -> dict:
             "ems_access": _r(float(ems_n[i]), 3),
             "residential": _r(float(resid_n[i]), 3),
             "emissions": _r(float(emit_n[i]), 3),
+            "bike_demand": _r(float(bike_n[i]), 3),
         }
         for i in range(sub.n)
     ]

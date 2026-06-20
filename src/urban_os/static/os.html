@@ -374,7 +374,7 @@
   let FRAME = 0, playing = false, timer = null;
   let RELEASE = 0, SHELTER = 0;
   let LENS = null;
-  let CUR_LAYER = 'crush';     // map-heat source: crush | ems_access | residential | emissions
+  let CUR_LAYER = 'crush';     // map-heat source: crush | ems_access | residential | emissions | bike_demand
   let OVERLAYS_BYID = null;    // /overlays per-node static intelligence fields (lazy-loaded)
   // Switch the City heatmap between the live crush ripple and a static intelligence
   // overlay. Reuses the existing os-heatmap (just changes node weight) so it composes
@@ -450,8 +450,8 @@
       const base = nd.is_sink ? 7 : Math.max(7, Math.min(26, 6 + Math.log10(nd.capacity + 10) * 4));
       const r = nd.group === 'venue' ? base + 3 : base;
       // Map-heat layer toggle: 'crush' uses the live congestion ripple; the
-      // intelligence overlays (EMS access / Activity / Emissions) drive the SAME
-      // heatmap with their static per-node weight from /overlays.
+      // intelligence overlays (EMS access / Activity / Emissions / Bike demand)
+      // drive the SAME heatmap with their static per-node weight from /overlays.
       let w;
       if (CUR_LAYER !== 'crush' && OVERLAYS_BYID) {
         const ov = OVERLAYS_BYID[nd.id];
@@ -687,10 +687,14 @@
             meterHTML('ems','EMS access blocked','—')+meterHTML('emissions','Idling emissions','—')+
             meterHTML('noise','Residential noise','—')+meterHTML('fare','Fares at risk','—')+'</div>'+
           // Map-heat layer toggle: paint the heatmap by the live crush or by an
-          // intelligence overlay (EMS access · Activity · Emissions) from /overlays.
+          // intelligence overlay (EMS access · Activity · Emissions · Bike demand)
+          // from /overlays. Bike demand is advisory (peak Bike Share trip-origin
+          // "demand to leave" — synthetic until a real slice is committed, ADR-0030).
           '<div class="maplayers" id="maplayers"><span class="mll">Map heat</span>'+
-            [['crush','Crush'],['ems_access','EMS'],['residential','Activity'],['emissions','Emissions']]
-              .map(([k,t])=>'<button class="mlb'+(k==='crush'?' on':'')+'" data-layer="'+k+'" type="button">'+t+'</button>').join('')+
+            [['crush','Crush',''],['ems_access','EMS',''],['residential','Activity',''],
+             ['emissions','Emissions',''],
+             ['bike_demand','Bike demand','Advisory: peak Bike Share trip-origin demand (demand to leave) · display-only, never priced']]
+              .map(([k,t,tip])=>'<button class="mlb'+(k==='crush'?' on':'')+'" data-layer="'+k+'" type="button"'+(tip?' title="'+esc(tip)+'"':'')+'>'+t+'</button>').join('')+
           '</div>'+
           // F-4: the headline used to show three unexplained dollar figures. Now the
           // big number is cross_domain_benefit, LABELLED "cross-domain (additive)" with
