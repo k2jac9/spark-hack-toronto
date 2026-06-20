@@ -575,6 +575,81 @@ def ttc_boardings_by_node(
         return _synthetic_ttc_boardings_by_node(substrate)
 
 
+# --- transit SUPPLY overlay (real GTFS scheduled departures) -------------------------
+# Where the demand sources (Bike Share / TTC boardings) show where people want to leave, this
+# shows how much scheduled transit actually serves each area: real evening (17:00-19:00)
+# departures per stop from the TTC GTFS feed (scripts/fetch_gtfs_supply.py), fused onto the
+# substrate as a static per-node supply intensity. A display overlay (ADR-0032) — no lever,
+# no J, never a headline number. Real/measured (a count of scheduled departures, no modelling).
+
+TRANSIT_SUPPLY_PROVENANCE = "real/measured"
+_TRANSIT_SUPPLY_CACHE: list | None = None
+
+
+def reset_transit_supply_cache() -> None:
+    """Clear the cached transit-supply records (parity with the other ingest caches)."""
+    global _TRANSIT_SUPPLY_CACHE
+    _TRANSIT_SUPPLY_CACHE = None
+
+
+def _default_transit_supply() -> list:
+    """Default provider: the committed real GTFS supply slice via the static-value loader
+    (``key="transit_supply"``), read ONCE and cached. Empty when no slice is on the loader's
+    path → callers fall back to a synthetic series."""
+    global _TRANSIT_SUPPLY_CACHE
+    if _TRANSIT_SUPPLY_CACHE is None:
+        from civic_analyst.ingest import timeseries
+
+        _TRANSIT_SUPPLY_CACHE = timeseries.load_station_values(
+            key="transit_supply", value_col="departures"
+        )
+    return _TRANSIT_SUPPLY_CACHE
+
+
+def _synthetic_transit_supply_by_node(substrate) -> dict[str, float]:
+    """Deterministic placeholder transit supply (no real data needed): denser interchanges
+    carry more scheduled service. Keeps the overlay running offline; clearly synthetic."""
+    import numpy as np
+
+    cap = substrate.capacity.astype(float)
+    base = np.where(~substrate.is_sink, cap, 0.0)
+    peak = float(base.max()) or 1.0
+    return {nid: float(base[i] / peak) for i, nid in enumerate(substrate.ids)}
+
+
+def transit_supply_by_node(
+    substrate, *, radius_deg: float = 0.0045, provider=None
+) -> dict[str, float]:
+    """Per-node transit-SUPPLY intensity — real GTFS evening scheduled departures lifted onto
+    the substrate by proximity-weighted average (``{node_id: departures}``), a static overlay.
+    Falls back to a deterministic synthetic series when no slice is present (offline-safe)."""
+    import numpy as np
+
+    try:
+        recs = (provider or _default_transit_supply)()
+        recs = [r for r in recs if r.get("lat") is not None and r.get("lng") is not None]
+        if not recs:
+            raise RuntimeError("no transit supply loaded")
+        out: dict[str, float] = {}
+        for i, nid in enumerate(substrate.ids):
+            if substrate.is_sink[i]:
+                out[nid] = 0.0   # sinks are abstract exit lines, not real transit places
+                continue
+            la, lo = float(substrate.lat[i]), float(substrate.lng[i])
+            num = den = 0.0
+            for r in recs:
+                dlat = r["lat"] - la
+                dlng = (r["lng"] - lo) * np.cos(np.radians(la))
+                w = float(np.exp(-(dlat * dlat + dlng * dlng) / (radius_deg * radius_deg)))
+                num += w * float(r["value"])
+                den += w
+            out[nid] = (num / den) if den > 0 else 0.0
+        return out
+    except Exception as exc:
+        _log.warning("transit-supply fusion failed, using synthetic fallback: %s", exc)
+        return _synthetic_transit_supply_by_node(substrate)
+
+
 def bikeshare_demand_by_node(
     substrate, *, radius_deg: float = 0.0045, provider=None
 ) -> dict[str, dict[float, float]]:

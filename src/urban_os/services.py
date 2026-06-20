@@ -121,6 +121,19 @@ def mobility_demand_overlay(lenses, n: int) -> np.ndarray:
     return peak
 
 
+def transit_supply_overlay(substrate) -> np.ndarray:
+    """Per-node transit-SUPPLY intensity (real GTFS evening scheduled departures) as a raw
+    ``(N,)`` array ordered to ``substrate.ids`` — the supply map heat layer (ADR-0032), paired
+    with the demand overlays. Reads the adapter (synthetic fallback offline); the caller
+    normalises 0..1. Static + display-only — prices nothing, never moves ``J``."""
+    from .adapters import transit_supply_by_node
+
+    supply = transit_supply_by_node(substrate)
+    out = np.array([float(supply.get(nid, 0.0)) for nid in substrate.ids], dtype=float)
+    np.nan_to_num(out, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+    return out
+
+
 def calibration_report(lenses, result) -> dict:
     """Run-level data-driven calibration figures (Phase 1, advisory-only).
 

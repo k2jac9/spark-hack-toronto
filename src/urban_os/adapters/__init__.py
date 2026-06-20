@@ -16,7 +16,9 @@ from .toronto import (
     observed_counts_by_node,
     reset_bikeshare_demand_cache,
     reset_observed_counts_cache,
+    reset_transit_supply_cache,
     reset_ttc_boardings_cache,
+    transit_supply_by_node,
     ttc_boardings_by_node,
 )
 
@@ -33,4 +35,7 @@ __all__ = [
     # TTC subway boardings (real magnitude, modelled shape) — a TransitLoad source (ADR-0031).
     "ttc_boardings_by_node",
     "reset_ttc_boardings_cache",
+    # Transit supply (real GTFS evening departures) — a display overlay (ADR-0032).
+    "transit_supply_by_node",
+    "reset_transit_supply_cache",
 ]
