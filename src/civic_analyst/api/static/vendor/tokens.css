@@ -15,7 +15,15 @@
   --text:#e2e8f0; --text-strong:#f1f5f9; --text-soft:#cbd5e1;
   --text-muted:#94a3b8; --text-dim:#64748b;
   --border:#334155; --border-2:#1e293b; --border-hover:#64748b;
-  --accent:#38bdf8; --accent-text:#bae6fd; --accent-link:#93c5fd;
+  /* Signature azure (re-anchored from a generic sky-blue) — the one UrbanOS accent
+     every functional surface shares. */
+  --accent:#4f9dff; --accent-text:#cfe1ff; --accent-link:#9dc1ff;
+  /* Brand identity layer — an azure→iris duotone used ONLY on identity surfaces
+     (wordmark, boot/hero, primary CTA). Kept separate from --accent so functional
+     contrast + the risk ramp below never depend on the gradient. */
+  --brand-1:#4f9dff; --brand-2:#9d6bff;
+  --brand-grad:linear-gradient(105deg, var(--brand-1) 0%, var(--brand-2) 100%);
+  --brand-glow:color-mix(in srgb, var(--brand-2) 45%, var(--brand-1));
   --risk-high:#f87171; --risk-medium:#fbbf24; --risk-low:#facc15; --risk-none:#4ade80;
   --verify:#4ade80; --verify-border:#14532d; --verify-bg-idle:transparent;
   --verify-bg:#14532d; --verify-text:#dcfce7;
@@ -47,6 +55,10 @@ html[data-theme="cyber"] {
   --text-muted:#7fb6c9; --text-dim:#7fb6c9;
   --border:#00e5ff33; --border-2:#00e5ff33; --border-hover:#00e5ff;
   --accent:#00e5ff; --accent-text:#aef6ff; --accent-link:#aef6ff;
+  /* Cyber brand duotone = cyan→electric-violet (re-points the same identity tokens). */
+  --brand-1:#00e5ff; --brand-2:#b14bff;
+  --brand-grad:linear-gradient(105deg, var(--brand-1) 0%, var(--brand-2) 100%);
+  --brand-glow:color-mix(in srgb, var(--brand-2) 50%, var(--brand-1));
   --risk-high:#ff3b6b; --risk-medium:#ffb020; --risk-low:#ffe34d; --risk-none:#2bff88;
   --verify:#00e5ff; --verify-border:#00e5ff; --verify-bg-idle:#00e5ff14;
   --verify-bg:#00e5ff26; --verify-text:#eaffff;

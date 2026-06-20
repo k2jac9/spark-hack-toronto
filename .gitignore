@@ -54,3 +54,9 @@ data/cache/
 # RAPIDS GPU runtime logs (cuFile / kvikio GPU Direct Storage) — written by the
 # GPU stack on the box; not source. See requirements-gpu.txt / ADR-0024.
 cufile.log
+
+# Local UI-verification artifacts (Playwright MCP snapshots + before/after shots).
+# Captured to validate UX PRs; evidence, not source — kept out of the repo.
+.playwright-mcp/
+before-*.png
+after-*.png

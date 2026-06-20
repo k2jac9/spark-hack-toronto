@@ -19,22 +19,29 @@
  *   OSBoot.skip() -> void
  *       Immediately remove the overlay and resolve any pending play() (Esc / impatient demos).
  *
- * :root CSS custom properties read (optional, all have hardcoded cyan fallbacks):
- *   --accent       (fallback #38bdf8)   primary cyan
- *   --accent-2     (fallback #22d3ee)   secondary cyan/sky
+ * :root CSS custom properties read (optional, all have hardcoded fallbacks):
+ *   --accent       (fallback #4f9dff)   primary azure
+ *   --accent-2     (fallback #22d3ee)   secondary sky
+ *   --brand-1      (fallback --accent)  brand gradient start (azure)
+ *   --brand-2      (fallback #9d6bff)   brand gradient end (iris)
  *   --os-boot-bg   (fallback #05070d)   backdrop color
  */
 (function () {
   "use strict";
 
-  var ACCENT = "#38bdf8", ACCENT2 = "#22d3ee", BG = "#05070d";
-  // Read tokens off :root if the host page defines them; otherwise keep the cyan fallbacks.
+  var ACCENT = "#4f9dff", ACCENT2 = "#22d3ee", BG = "#05070d";
+  var BRAND1 = "", BRAND2 = "#9d6bff";   // brand duotone — default to accent→iris
+  // Read tokens off :root if the host page defines them; otherwise keep the fallbacks.
   try {
     var rs = getComputedStyle(document.documentElement);
     var a = rs.getPropertyValue("--accent").trim();   if (a) ACCENT = a;
     var b = rs.getPropertyValue("--accent-2").trim();  if (b) ACCENT2 = b;
     var g = rs.getPropertyValue("--os-boot-bg").trim(); if (g) BG = g;
+    var b1 = rs.getPropertyValue("--brand-1").trim();  if (b1) BRAND1 = b1;
+    var b2 = rs.getPropertyValue("--brand-2").trim();  if (b2) BRAND2 = b2;
   } catch (_) { /* SSR / no DOM — ignore */ }
+  if (!BRAND1) BRAND1 = ACCENT;                 // fall back to the accent if no brand token
+  var GRAD = "linear-gradient(105deg," + BRAND1 + " 0%," + BRAND2 + " 100%)";
 
   var REDUCED = false;
   try { REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (_) {}
@@ -63,35 +70,39 @@
         "background:repeating-linear-gradient(0deg,transparent 0 3px," + ACCENT + "0c 3px 4px);" +
         "animation:osb-scan 7s linear infinite}" +
       "@keyframes osb-scan{from{background-position:0 0}to{background-position:0 200px}}" +
-      // Wordmark: letter-spacing expand + glow.
-      "#os-boot .mark{position:relative;font-weight:800;font-size:clamp(2.4rem,9vw,5.5rem);" +
-        "letter-spacing:.04em;color:#f0f9ff;" +
-        "text-shadow:0 0 18px " + ACCENT + "cc,0 0 46px " + ACCENT2 + "66;" +
+      // Wordmark: azure→iris brand gradient clipped to the glyphs, with a duotone
+      // drop-shadow glow. The glow lives on `filter` (NOT animated), so it persists
+      // after the letter-spacing entrance settles — and survives reduced-motion.
+      "#os-boot .mark{position:relative;font-weight:900;font-size:clamp(2.6rem,9.4vw,5.8rem);" +
+        "letter-spacing:.16em;" +
+        "background:" + GRAD + ";-webkit-background-clip:text;background-clip:text;" +
+        "color:transparent;-webkit-text-fill-color:transparent;" +
+        "filter:drop-shadow(0 0 24px " + BRAND2 + "66) drop-shadow(0 0 9px " + BRAND1 + "88);" +
         "animation:osb-mark 1.6s cubic-bezier(.2,.7,.2,1) both}" +
-      "@keyframes osb-mark{0%{opacity:0;letter-spacing:-.18em;filter:blur(8px)}" +
-        "60%{opacity:1;filter:blur(0)}100%{opacity:1;letter-spacing:.18em}}" +
+      "@keyframes osb-mark{0%{opacity:0;letter-spacing:-.12em}" +
+        "60%{opacity:1}100%{opacity:1;letter-spacing:.16em}}" +
       "#os-boot .tag{font-size:clamp(1rem,3.2vw,1.5rem);color:" + ACCENT2 + ";font-weight:600;" +
         "opacity:0;animation:osb-fade .8s ease .9s both}" +
       "#os-boot .sub{font-size:.86rem;color:#7d93b2;letter-spacing:.02em;" +
         "opacity:0;animation:osb-fade .8s ease 1.3s both}" +
       "@keyframes osb-fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}" +
       // The one bright actionable thing (Von Restorff): the Enter button.
-      "#os-boot .enter{margin-top:.6rem;font:inherit;font-size:1.05rem;font-weight:700;letter-spacing:.06em;" +
-        "color:#04121f;background:linear-gradient(180deg," + ACCENT2 + "," + ACCENT + ");" +
-        "border:0;border-radius:11px;padding:.78rem 2.1rem;cursor:pointer;" +
-        "box-shadow:0 0 0 1px " + ACCENT + ",0 6px 30px " + ACCENT + "66;" +
+      "#os-boot .enter{margin-top:.6rem;font:inherit;font-size:1.05rem;font-weight:800;letter-spacing:.06em;" +
+        "color:#06091a;background:" + GRAD + ";" +
+        "border:0;border-radius:12px;padding:.8rem 2.2rem;cursor:pointer;" +
+        "box-shadow:0 0 0 1px " + BRAND1 + ",0 8px 34px " + BRAND2 + "66;" +
         "opacity:0;transform:translateY(10px) scale(.96);" +
         "animation:osb-enter .6s cubic-bezier(.2,.8,.2,1) 1.7s both,osb-pulse 2.2s ease-in-out 2.4s infinite}" +
       "#os-boot .enter:hover{filter:brightness(1.08)}" +
       "#os-boot .enter:active{transform:translateY(1px) scale(.99)}" +
       "#os-boot .enter:focus-visible{outline:2px solid #fff;outline-offset:3px}" +
       "@keyframes osb-enter{to{opacity:1;transform:none}}" +
-      "@keyframes osb-pulse{0%,100%{box-shadow:0 0 0 1px " + ACCENT + ",0 6px 30px " + ACCENT + "55}" +
-        "50%{box-shadow:0 0 0 1px " + ACCENT + ",0 8px 42px " + ACCENT + "aa}}" +
+      "@keyframes osb-pulse{0%,100%{box-shadow:0 0 0 1px " + BRAND1 + ",0 6px 30px " + BRAND2 + "55}" +
+        "50%{box-shadow:0 0 0 1px " + BRAND1 + ",0 8px 44px " + BRAND2 + "aa}}" +
       "#os-boot .hint{font-size:.72rem;color:#5a6b85;margin-top:-.4rem;opacity:0;animation:osb-fade .8s ease 2s both}" +
       // Reduced motion: drop transforms/loops, keep gentle fades only.
       "@media (prefers-reduced-motion: reduce){#os-boot *{animation-duration:.01ms!important;" +
-        "animation-iteration-count:1!important}#os-boot .mark{letter-spacing:.06em;filter:none}" +
+        "animation-iteration-count:1!important}#os-boot .mark{letter-spacing:.16em}" +
         "#os-boot .scan,#os-boot .grid{animation:none}}";
     var el = document.createElement("style");
     el.id = STYLE_ID;
