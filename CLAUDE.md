@@ -11,14 +11,19 @@ python -m venv .venv && . .venv/bin/activate
 make install && make install-hooks      # deps + pre-push test gate
 cp .env.example .env
 ```
-Then confirm with `make test` (expect 429 green) and tell them `make demo` opens the offline
-map at http://localhost:8000/. Point them at the workflow + "Current status" below.
+Then confirm with `make test` (expect **584 green**) and tell them `make demo` opens the
+offline map at http://localhost:8000/ (and `make urbanos` the simulation UI at :8001). Point
+them at the workflow + "Current status" below.
 
 ## What this is
-Local-first, multi-agent civic-risk app for **NVIDIA Spark Hack Toronto (May 29–31 2026)**.
-FastAPI + a supervisor/sub-agent pipeline over a `networkx` knowledge graph of Toronto open
-data, a local Nemotron model (OpenAI-compatible endpoint), MapLibre + offline PMTiles map.
-Layout: `src/civic_analyst/{ingest,graph,agents,api}`, `tests/`, `scripts/`, `demo_data/`.
+A **full, ongoing local-first project** — two apps over one architecture: `civic_analyst`
+(address-level civic-risk) and `urban_os` (an urban-stress simulation kernel). FastAPI + a
+supervisor/sub-agent pipeline over a `networkx` knowledge graph of Toronto open data, a local
+Nemotron model (OpenAI-compatible endpoint), MapLibre + offline PMTiles map. It **began at
+NVIDIA Spark Hack Toronto (May 2026)** and is now developed as a real project, not a demo —
+that origin is preserved as history in older ADRs, the pitch, and the video kit; the
+forward-looking framing here treats it as a maintained product.
+Layout: `src/civic_analyst/{ingest,graph,agents,api}`, `src/urban_os/`, `tests/`, `scripts/`, `demo_data/`.
 
 ## Golden commands (run before every push)
 - `make test`   — `PYTHONPATH=src pytest`; **must be green** (CI enforces it on main)
@@ -47,20 +52,29 @@ Layout: `src/civic_analyst/{ingest,graph,agents,api}`, `tests/`, `scripts/`, `de
 - On the GX10: `LLM_MODEL=nemotron-3-nano` (interactive) + `LLM_BATCH_MODEL=gpt-oss:120b` (batch).
 - Code is offline-safe: no model → deterministic fallback. **Don't "fix" the fallback.**
 
-## Don't regress these (GX10 + demo invariants)
+## Don't regress these (deployment + product invariants)
 - **ARM64 only** — build aarch64 images, pre-pull ARM wheels/containers.
 - **MoE / small-active models only** (128GB but ~273 GB/s; dense 70B ≈ 2.7 tok/s).
 - **Map stays 100% offline** — no CDN, no tile servers (vendored assets + PMTiles).
 - **Narrator cites only datasets passed in evidence** — don't loosen that prompt.
 
-## Priorities (hackathon discipline)
-- **CORE (keep working):** offline map, `/analyze` with real model + real data, grounded citations.
-- **STRETCH (only if core is solid):** QLoRA fine-tune, multi-dataset fusion, NemoClaw on the box.
-- Don't overscope. **One flawless demo > five half-features.**
+## Priorities (engineering discipline)
+- **CORE (always green):** offline map, `/analyze` + `/optimize` with real model + real data,
+  grounded citations, and the data-driven lenses — keep these working and CI-green.
+- **Quality over breadth.** Ship coherent, tested, honest increments; don't overscope a single
+  change. One small, correct, well-verified feature beats five half-built ones.
+- **Stretch / research:** QLoRA fine-tune, deeper multi-dataset fusion, on-box GPU + LLM runtimes.
 
-## Current status (handoff — 2026-05-31, demo day)
+## Current status (updated 2026-06-20)
 
-> **Post-hackathon R&D update (2026-06-20).** The data-driven roadmap
+> **Now a full project (not a hackathon demo).** It shipped at NVIDIA Spark Hack Toronto and
+> is now maintained as a real, ongoing project: `main` is CI-gated, work lands via small
+> reviewed PRs, and the data-driven lenses are grounded in real Toronto open data
+> (Bike Share #105, TTC boardings #107, GTFS transit supply #108) reachable through a hardened
+> CKAN client + `scripts/catalog.py` (#106). The "demo"/"hackathon" framing in the ADRs, the
+> pitch, and the video kit is preserved as honest origin history. **Suite: 584 green / 1 skipped.**
+
+> **Data-driven roadmap update (2026-06-20).** The roadmap
 > (`docs/research/tpf-and-data-driven-lenses.md`) is shipping phase-by-phase — every step
 > **opt-in + CPU-fallback + advisory**, so the **default demo numbers stay byte-identical**
 > (do-nothing **J $323,222** → best 14-min release **$105,050**, peak cut 67%). Landed:
@@ -71,15 +85,20 @@ Layout: `src/civic_analyst/{ingest,graph,agents,api}`, `tests/`, `scripts/`, `de
 > as a `source()` (`URBANOS_TRANSIT_LOAD`, **off by default**, no lever / no J term; flag-on CLI
 > reads J $366,940 → $113,315, flag-off unchanged). **Phase 3 (TPF) is a documented NO-GO** —
 > the Phase-2 win is 100% gradient / 0% rotational, so the roadmap §8.4 gate is never met; the
-> next step is more Fit C lenses, not TPF. Supporting work merged: narrator-guard comma-form
-> fix (#95), idempotent `mcp_server.load` (#94), `make gpu-check-wsl` (#97), property/edge
-> tests for both data-driven modules (#99). **Suite now 529 passed / 1 skipped.** All honesty
-> invariants intact; the demo-day handoff below is still accurate (box remains deployed).
+> next step is more Fit C lenses, not TPF. Also shipped: **MobilityDemand** display lens
+> (**ADR-0030**, #103) grounded in a real Bike Share slice (#105) + a `bike_demand` map overlay
+> (#104); **TTC boardings** TransitLoad source (**ADR-0031**, #107, real-magnitude/modelled-shape);
+> a **GTFS transit-supply** overlay (**ADR-0032**, #108); the **hardened CKAN client +
+> `scripts/catalog.py`** (#106); the micromobility-relief panel (#109). Supporting: narrator-guard
+> comma-form fix (#95), idempotent `mcp_server.load` (#94), `make gpu-check-wsl` (#97),
+> property/edge tests (#99). **Suite: 584 passed / 1 skipped.** All honesty invariants intact;
+> the original deployment (below) remains live.
 
-**Full read for the next session:** `docs/HANDOFF.md` (@cyberqubit → @k2jac9), `docs/PITCH.md`
-(the pitch), `docs/ON_THE_BOX.md` (box runbook), `docs/video/` (submission video kit). A fresh
-clone builds + passes all tests (`make test` ≈ **529 green**). Everything below is **merged on
-`main` + CI-green**, and the **box is deployed on the live GPU stack** (see "GPU stack" below).
+**Context & origin docs:** `docs/ON_THE_BOX.md` (box runbook, operational), `docs/HANDOFF.md`,
+`docs/PITCH.md`, `docs/video/` — the last three are **origin/hackathon artifacts**, kept as
+honest history (not maintained as current product docs). A fresh clone builds + passes all
+tests (`make test` ≈ **584 green**). Everything below is **merged on `main` + CI-green**, and
+the **original GPU deployment remains live** (see "GPU stack" below).
 
 **The project is two apps that share one architecture:**
 - **`civic_analyst` (`:8000`)** — the address risk app: 3 fused Toronto datasets (DineSafe +

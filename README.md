@@ -1,16 +1,18 @@
-# Toronto Civic Risk Analyst
+# Toronto Civic Risk Analyst + Urban-OS
 
 [![CI](https://github.com/cyberqubit/spark-hack-toronto/actions/workflows/ci.yml/badge.svg)](https://github.com/cyberqubit/spark-hack-toronto/actions/workflows/ci.yml)
 
-A **local-first, multi-agent** civic intelligence app for the **NVIDIA Spark Hack — Toronto**
-(May 29–31, 2026). It fuses several City of Toronto open datasets into a knowledge graph,
-then a supervisor agent + specialized sub-agents (running on a **local Nemotron model**
-on the ASUS Ascent GX10 / NVIDIA GB10) produce an **actionable risk read** for any address
-or business — with sources and a drafted action. No data leaves the device.
+A **full, local-first, multi-agent** civic-intelligence project. It fuses City of Toronto open
+datasets into a knowledge graph; a supervisor agent + specialized sub-agents (on a **local
+Nemotron model**, ASUS Ascent GX10 / NVIDIA GB10) produce an **actionable, cited risk read** for
+any address or business; and **Urban-OS** runs an on-device urban-stress simulation that
+quantifies coordinated interventions across domains. No data leaves the device. It **began at the
+NVIDIA Spark Hack — Toronto (May 2026)** and is now developed as an **ongoing project** — the
+hackathon framing lives on in the ADRs / pitch / video kit as origin history.
 
-> **🔴 Live demo (during the event):** **https://gx10-4428.taila9fe06.ts.net** — the real app
-> served straight from the GX10 box over Tailscale Funnel (read-only). May be offline outside
-> demo windows; to bring it up, see [docs/REMOTE_ACCESS.md](docs/REMOTE_ACCESS.md).
+> **Live instance:** **https://gx10-4428.taila9fe06.ts.net** — served from the GX10 box over
+> Tailscale Funnel (read-only); may be offline outside active windows. To bring it up, see
+> [docs/REMOTE_ACCESS.md](docs/REMOTE_ACCESS.md).
 
 ---
 
@@ -229,10 +231,10 @@ On the GX10, point **NemoClaw** (running Nemotron locally via OpenShell) at
 `config/nemoclaw.mcp.json` so the agent answers civic-risk questions through our
 tools — the "Best Use of Nemotron/NemoClaw" integration.
 
-## Stretch goal: QLoRA fine-tune (GX10 GPU)
+## Roadmap: QLoRA fine-tune (GX10 GPU)
 Messy address matching is our hard problem. `scripts/finetune_address_resolution.py`
 trains a Nemotron-Nano QLoRA adapter (Unsloth/TRL) on `fixtures/address_resolution.sample.jsonl`,
-served back via `vllm serve --enable-lora`. Optional — only if the core demo is solid.
+served back via `vllm serve --enable-lora`. An optional research track.
 
 ## Local model (on the GX10)
 The GX10 ships with Ollama + DGX OS (ARM64). Pull a small-active model and serve its
@@ -242,11 +244,10 @@ ollama pull nemotron-3-nano        # or: gpt-oss:120b  (MoE, ~35-40 tok/s)
 # Ollama exposes http://localhost:11434/v1  -> set LLM_BASE_URL accordingly
 ```
 
-## Pre-event checklist
-- [ ] Apply as a full 4–5 person team (30-team cap, host-approved).
-- [ ] Resolve the Luma wallet/token gate with organizers.
-- [ ] Run `scripts/download_data.py` at home — don't rely on venue Wi-Fi.
-- [ ] Build the dev image **ARM64-native** (`docker build` on the GX10 or `--platform linux/arm64`).
-- [ ] Verify a building-inspections dataset / use permit status fields as the inspection signal.
+## Operations checklist
+- [ ] Cache real data slices locally: `scripts/download_data.py` + `make demo-data`
+      (discover datasets with `scripts/catalog.py search "<query>"`).
+- [ ] Build images **ARM64-native** (`docker build` on the GX10 or `--platform linux/arm64`).
+- [ ] `make test` green before deploy; bring the box up per [docs/ON_THE_BOX.md](docs/ON_THE_BOX.md).
 
-See `docs/`/the team brief for the full strategy. Built for the hackathon; MIT-style use.
+See `docs/` for the architecture (ADRs) and the origin pitch. MIT-style use.
