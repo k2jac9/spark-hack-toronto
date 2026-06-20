@@ -341,7 +341,7 @@
 
   <nav id="dock" aria-label="Lenses">
     <button class="lens" data-lens="city"    type="button" aria-label="City lens — overview" title="City — overview"><span class="ic" aria-hidden="true">🏙️</span>City</button>
-    <button class="lens" data-lens="safety"  type="button" aria-label="Safety lens — civic risk" title="Safety — civic risk"><span class="ic" aria-hidden="true">🛡️</span>Safety</button>
+    <button class="lens" data-lens="safety"  type="button" aria-label="Risk lens — civic address risk" title="Risk — civic address risk"><span class="ic" aria-hidden="true">🛡️</span>Risk</button>
     <button class="lens" data-lens="flow"    type="button" aria-label="Flow lens — crowd egress" title="Flow — crowd egress"><span class="ic" aria-hidden="true">🌊</span>Flow</button>
     <button class="lens" data-lens="economy" type="button" aria-label="Economy lens — local business" title="Economy — local business"><span class="ic" aria-hidden="true">💵</span>Economy</button>
   </nav>
@@ -757,7 +757,7 @@
             return '<li><button type="button" data-label="'+esc(a.label)+'"><span class="dot bg-'+b+'"></span>'+
               '<span style="flex:1">'+esc(a.label)+'</span><span class="num b-'+b+'">'+Math.max(a.risk_safety,a.risk_activity).toFixed(2)+'</span></button></li>'; }).join('');
         paint(
-          '<h2 class="ptitle">🛡️ Safety lens</h2>'+
+          '<h2 class="ptitle">🛡️ Risk lens</h2>'+
           '<p class="psub">The civic-risk app, as a kernel lens — address risk over 3 fused City of Toronto datasets. Every number is grounded; tap ✓ verify.</p>'+
           // ADR-0026: dataset provenance (Honest/Understandable) + the band legend so
           // the pin colours are self-explanatory without opening "How it works".
