@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- Cyber is the shipped default look (ADR-0035); Presentation Mode adds 3D + the
+     holographic info board on top, but no longer owns the theme (the floor stays cyber). -->
+<html lang="en" data-theme="cyber">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -564,7 +566,9 @@
     }
     function setPresentation(on) {
       PRES = on;
-      document.documentElement.setAttribute('data-theme', on ? 'cyber' : '');
+      // Cyber is the default theme floor — Presentation owns only the 3D skyline + info
+      // board now, never the theme (else toggling OFF would flip to azure). ADR-0035.
+      document.documentElement.setAttribute('data-theme', 'cyber');
       try { localStorage.setItem('presmode', on ? '1' : '0'); } catch (e) { /* private mode */ }
       const btn = document.getElementById('presmode-btn');
       if (btn) {
@@ -576,7 +580,7 @@
     document.getElementById('presmode-btn').addEventListener('click', () => setPresentation(!PRES));
     // Restore saved preference (theme applies immediately; 3D applies once the map loads).
     try { if (localStorage.getItem('presmode') === '1') PRES = true; } catch (e) { /* private mode */ }
-    document.documentElement.setAttribute('data-theme', PRES ? 'cyber' : '');
+    document.documentElement.setAttribute('data-theme', 'cyber');   // theme floor (ADR-0035)
     (function () {
       const btn = document.getElementById('presmode-btn');
       btn.setAttribute('aria-pressed', String(PRES));

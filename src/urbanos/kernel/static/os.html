@@ -1,5 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- The live palette is attribute-driven: `data-theme="cyber"` is the shipped default
+     (cyan→violet holographic look); clearing the attribute returns the azure→iris alt
+     (tokens.css :root). See ADR-0035. -->
+<html lang="en" data-theme="cyber">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -8,7 +11,7 @@
   <link rel="stylesheet" href="/static/vendor/tokens.css" />
   <link rel="stylesheet" href="/static/vendor/maplibre-gl.css" />
   <style>
-    :root { --accent-2:#22d3ee; --os-boot-bg:#05070d; }
+    /* --accent-2 / --os-boot-bg now live in tokens.css (both themes) — see ADR-0035. */
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif;
       color: var(--text); background: var(--map-bg); overflow: hidden; }
@@ -194,8 +197,24 @@
       animation: spin .8s linear infinite; vertical-align: -1px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     a:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    /* Climax intensity ramp uses html[data-theme="cyber"] (from tokens.css). */
-    html[data-theme="cyber"] #map { filter: saturate(1.15) contrast(1.05); }
+    /* ── Cyber holographic look (the shipped default, ADR-0035) ────────────────
+       The token re-point lives in tokens.css; these are the glow/texture effects
+       that aren't plain colour tokens — ported from the civic Risk view so the whole
+       shell reads holographic, not merely recoloured. Scoped to the shell's own
+       selectors. */
+    html[data-theme="cyber"] #map { filter: contrast(1.12) saturate(1.4) hue-rotate(-12deg) brightness(.95); }
+    html[data-theme="cyber"] #panel { box-shadow: var(--shadow-3), inset 0 0 70px #00e5ff14; }
+    html[data-theme="cyber"] .ptitle, html[data-theme="cyber"] #wordmark { text-shadow: 0 0 9px #00e5ff66; }
+    html[data-theme="cyber"] .combined .v { text-shadow: 0 0 16px color-mix(in srgb, var(--risk-none) 55%, transparent); }
+    html[data-theme="cyber"] .idx-score, html[data-theme="cyber"] .meter .v { font-family: var(--num); }
+    html[data-theme="cyber"] .verify, html[data-theme="cyber"] .mlb.on { box-shadow: 0 0 9px #00e5ff44; }
+    /* Faint full-screen scanline texture (very subtle; honours reduce-motion below). */
+    html[data-theme="cyber"] body::after { content: ""; position: fixed; inset: 0; z-index: 7;
+      pointer-events: none; background: repeating-linear-gradient(0deg, #00e5ff08 0 1px, transparent 1px 3px); }
+    /* "Light the room" optimize climax — an INTENSIFIER on top of the cyber default
+       (the old data-theme switch is now a no-op since cyber is the floor). One-shot,
+       mirrors the #flash timing. */
+    html.climax #map { filter: contrast(1.16) saturate(1.7) hue-rotate(-12deg) brightness(1.02); transition: filter .5s ease; }
 
     /* ── ADR-0026: motion + clarity ──────────────────────────────────────────
        a11y first: honour the OS "reduce motion" setting — every animation/
@@ -203,6 +222,9 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: .001ms !important;
         animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+      /* Drop the scanline texture and snap the climax filter (no easing) under reduce-motion. */
+      html[data-theme="cyber"] body::after { display: none; }
+      html.climax #map { transition: none; }
     }
     /* Staggered entrance of panel children on a lens swap — depth without clutter. */
     #panel.swap > * { animation: rise .42s both cubic-bezier(.2,.7,.3,1); }
@@ -365,6 +387,9 @@
         Dollar figures are <span class="illus">calibrated, illustrative</span> (the <i>shape</i> is the claim, not the cent).</p>
       <h3>On-device optimization</h3>
       <p class="hint">A cuOpt <b>evacuation max-flow</b> bounds the best the network can clear; cuML clusters risk into hotspots — both GPU-accelerated on the box, with CPU fallback.</p>
+      <h3>Appearance</h3>
+      <p class="hint">The default look is the <b>cyber</b> holographic theme. Prefer the classic
+        azure→iris brand identity? <button class="gh" id="theme-toggle" type="button" aria-pressed="false">Use azure→iris</button></p>
     </div>
   </dialog>
 
@@ -383,6 +408,10 @@
   <script src="/static/os-boot.js"></script>
   <script>
   "use strict";
+  // Theme: cyber is the shipped default (set on <html> in the markup). Honour a saved
+  // preference for the azure→iris alt before first paint (ADR-0035). The help dialog has
+  // the toggle; clearing data-theme returns the tokens.css :root azure palette.
+  if (localStorage.getItem('os-theme') === 'azure') document.documentElement.removeAttribute('data-theme');
   const protocol = new pmtiles.Protocol();
   maplibregl.addProtocol('pmtiles', protocol.tile);
   const PMTILES = `pmtiles://${location.origin}/static/toronto.pmtiles`;
@@ -598,6 +627,18 @@
   document.getElementById('helpbtn').addEventListener('click', () => { try { helpDlg.showModal(); } catch (_) {} });
   helpDlg.querySelector('.close').addEventListener('click', () => helpDlg.close());
   helpDlg.addEventListener('click', (e) => { if (e.target === helpDlg) helpDlg.close(); });
+  // Appearance toggle: flip between the cyber default and the azure→iris alt, persisted.
+  const themeBtn = document.getElementById('theme-toggle');
+  const syncThemeBtn = () => { const azure = !document.documentElement.hasAttribute('data-theme');
+    themeBtn.textContent = azure ? 'Use cyber' : 'Use azure→iris';
+    themeBtn.setAttribute('aria-pressed', String(azure)); };
+  themeBtn.addEventListener('click', () => {
+    const azure = !document.documentElement.hasAttribute('data-theme');
+    if (azure) { document.documentElement.setAttribute('data-theme', 'cyber'); localStorage.setItem('os-theme', 'cyber'); }
+    else { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('os-theme', 'azure'); }
+    syncThemeBtn();
+  });
+  syncThemeBtn();
   // ADR-0026: result cues — the headline $ "pops" and (on the optimizer) the room flashes.
   function popCombined() { const c = document.getElementById('combined');
     if (c) { c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop'); } }
@@ -1033,8 +1074,11 @@
     try {
       const d = await (await fetch('/optimize?safety=1&business=1')).json();
       const relMin = d.best_params.release_minutes || 0, shelFrac = d.best_params.shelter_fraction || 0;
-      // Light the room: cyber intensity ramp + a one-shot flash for the climax (Von Restorff).
-      document.documentElement.setAttribute('data-theme', 'cyber');
+      // Light the room: a one-shot intensity ramp + flash for the climax (Von Restorff).
+      // Cyber is the default theme now, so the climax INTENSIFIES it (html.climax) rather
+      // than switching theme; one-shot, mirrors the #flash timing.
+      document.documentElement.classList.add('climax');
+      setTimeout(() => document.documentElement.classList.remove('climax'), 1200);
       flashRoom();
       // Drive the levers to the optimum on the shared map + meters.
       RELEASE = relMin; SHELTER = shelFrac;

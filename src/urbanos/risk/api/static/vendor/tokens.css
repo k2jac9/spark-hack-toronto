@@ -18,6 +18,10 @@
   /* Signature azure (re-anchored from a generic sky-blue) — the one UrbanOS accent
      every functional surface shares. */
   --accent:#4f9dff; --accent-text:#cfe1ff; --accent-link:#9dc1ff;
+  /* secondary sky accent + boot backdrop — were inline in os.html; live here now so
+     tokens.css is the single source of truth across both themes (the cyber block
+     re-points them to the cyan default). */
+  --accent-2:#22d3ee; --os-boot-bg:#05070d;
   /* Brand identity layer — an azure→iris duotone used ONLY on identity surfaces
      (wordmark, boot/hero, primary CTA). Kept separate from --accent so functional
      contrast + the risk ramp below never depend on the gradient. */
@@ -51,6 +55,9 @@
    glow/texture effects that go with this theme live in each page's <style>. ===== */
 html[data-theme="cyber"] {
   --map-bg:#05080f; --surface:#05080f; --surface-2:#0a1422; --surface-sel:#07223a;
+  /* os-boot.js reads these two off :root at play() time — define them here too so the
+     boot overlay tints cyan under the cyber default (else it falls back to azure). */
+  --accent-2:#22d3ee; --os-boot-bg:#05080f;
   --text:#bfefff; --text-strong:#eaffff; --text-soft:#bfefff;
   --text-muted:#7fb6c9; --text-dim:#7fb6c9;
   --border:#00e5ff33; --border-2:#00e5ff33; --border-hover:#00e5ff;
