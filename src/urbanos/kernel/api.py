@@ -55,6 +55,8 @@ from urbanos.kernel.services import (
     learned_dynamics_report as _learned_dynamics_report,
     mobility_demand_overlay as _mobility_demand_overlay,
     mobility_demand_report as _mobility_demand_report,
+    road_risk_overlay as _road_risk_overlay,
+    road_risk_report as _road_risk_report,
     transit_supply_overlay as _transit_supply_overlay,
 )
 
@@ -389,6 +391,10 @@ def lenses_endpoint(
             # (peak/mean over the run) — how much the egress crush coincides with high
             # bike-share demand. Display-only, no dollars, no lever, never a headline number.
             "mobility_demand": _mobility_demand_report(extra, current),
+            # RoadRisk advisory (Fit C, ADR-0036): the crush-road-exposure signal (peak/mean
+            # over the run) — how much the egress crush overlaps historically dangerous KSI
+            # places. Display-only, no dollars, no lever, never a headline number.
+            "road_risk": _road_risk_report(extra, current),
             "benefit_definitions": BENEFIT_DEFINITIONS,
         }
     )
@@ -429,13 +435,16 @@ def overlays_endpoint() -> dict:
     # Transit SUPPLY: real GTFS evening scheduled departures fused per node (ADR-0032) — the
     # supply signal paired with the demand overlays. Static; synthetic fallback offline.
     supply = _transit_supply_overlay(sub)
+    # Road RISK: severity-weighted Vision Zero / KSI collision history fused per node (ADR-0036)
+    # — where the road is historically dangerous. Static + advisory; synthetic fallback offline.
+    roadrisk = _road_risk_overlay(extra, sub.n)
 
     def _norm(a):
         m = float(a.max())
         return a / m if m > 0 else a
 
-    ems_n, resid_n, emit_n, bike_n, supply_n = (
-        _norm(ems), _norm(resid), _norm(emit), _norm(bike), _norm(supply)
+    ems_n, resid_n, emit_n, bike_n, supply_n, roadrisk_n = (
+        _norm(ems), _norm(resid), _norm(emit), _norm(bike), _norm(supply), _norm(roadrisk)
     )
     nodes = [
         {
@@ -447,6 +456,7 @@ def overlays_endpoint() -> dict:
             "emissions": _r(float(emit_n[i]), 3),
             "bike_demand": _r(float(bike_n[i]), 3),
             "transit_supply": _r(float(supply_n[i]), 3),
+            "road_risk": _r(float(roadrisk_n[i]), 3),
         }
         for i in range(sub.n)
     ]

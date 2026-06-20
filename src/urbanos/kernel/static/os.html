@@ -459,7 +459,8 @@
   // overlay. Reuses the existing os-heatmap (just changes node weight) so it composes
   // with lens show/hide and adds no new map layers.
   const LAYER_NAMES = { crush:'Live crush', ems_access:'EMS access', residential:'Civic activity',
-    emissions:'Idling emissions', bike_demand:'Bike-share demand', transit_supply:'Transit supply' };
+    emissions:'Idling emissions', bike_demand:'Bike-share demand', transit_supply:'Transit supply',
+    road_risk:'Road risk (KSI)' };
   async function setOverlay(key) {
     CUR_LAYER = key;
     const box = document.getElementById('maplayers');
@@ -790,7 +791,8 @@
             [['Live',[['crush','Crush','The live post-event crush ripple (load ÷ capacity)']]],
              ['Context',[['ems_access','EMS','EMS-access criticality per node'],
                          ['residential','Activity','Civic activity — building permits + business licences'],
-                         ['emissions','Emissions','Idling-emissions hotspot (do-nothing baseline)']]],
+                         ['emissions','Emissions','Idling-emissions hotspot (do-nothing baseline)'],
+                         ['road_risk','Road risk','Vision Zero / KSI collision history — where the road is historically dangerous (real, advisory)']]],
              ['Demand',[['bike_demand','Bike','Bike Share trip-origin demand — where people want to leave (advisory)']]],
              ['Supply',[['transit_supply','Transit','Scheduled evening transit departures near each node — real GTFS (advisory)']]]]
               .map(([g,btns])=>'<span class="mlg"><span class="mlg-l">'+g+'</span><span class="mlg-btns">'+
@@ -1098,6 +1100,23 @@
     '</div>';
   }
 
+  // RoadRisk advisory (Fit C, ADR-0036): how much the egress crush overlaps the fixed Vision
+  // Zero / KSI danger field — i.e. whether the lever funnels the crowd through historically
+  // dangerous intersections. Reuses the .learned advisory card. '' when unavailable (inert/no
+  // slice), so the default view is unchanged. Display-only — prices nothing, never a headline.
+  function roadRiskHTML(rr) {
+    if (!rr || !rr.available) return '';
+    const f3 = (x) => Number(x || 0).toFixed(3);
+    return '<div class="learned">'+
+      '<div class="k">Road-risk exposure<span class="prov">Vision Zero · advisory</span></div>'+
+      '<div class="fits">'+
+        '<div class="fit"><div class="lbl">Peak exposure</div><div class="num">'+f3(rr.peak_exposure)+'</div></div>'+
+        '<div class="fit"><div class="lbl">Mean exposure</div><div class="num">'+f3(rr.mean_exposure)+'</div></div>'+
+      '</div>'+
+      '<p class="hint">Overlap (cosine, 0–1) of the egress crush with historically dangerous KSI intersections — lower is safer. Advisory only; prices nothing.</p>'+
+    '</div>';
+  }
+
   async function runOptimize(e) {
     const btn = e ? e.target : null;
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Searching levers…'; }
@@ -1146,7 +1165,8 @@
         // and the MobilityDemand micromobility-relief signal (ADR-0030). Both advisory —
         // labelled, displayed apart from kernel-exact numbers, never a headline.
         learnedDynamicsHTML(l && l.learned_dynamics) +
-        mobilityDemandHTML(l && l.mobility_demand);
+        mobilityDemandHTML(l && l.mobility_demand) +
+        roadRiskHTML(l && l.road_risk);
       if (out) out.innerHTML = card;
       // Animate the City meters to the optimum (same /lenses source as the ripple).
       if (l && document.getElementById('combined')) {

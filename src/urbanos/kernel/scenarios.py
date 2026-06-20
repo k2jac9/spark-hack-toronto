@@ -17,6 +17,7 @@ from .adapters import (
     civic_activity_by_node,
     civic_safety_by_node,
     observed_counts_by_node,
+    road_risk_by_node,
     ttc_boardings_by_node,
 )
 from .lenses import (
@@ -29,6 +30,7 @@ from .lenses import (
     FareRevenueLens,
     MobilityDemandLens,
     NoiseLivabilityLens,
+    RoadRiskLens,
     SafetyLens,
     TransitLoadLens,
     WeatherLens,
@@ -130,13 +132,22 @@ def extra_display_lenses(sc=None) -> list:
     ``adapters.bikeshare_demand_by_node`` (synthetic fallback until a slice is committed).
     It writes only its own ``bike_demand`` overlay — read-only on the crowd fields, no
     lever, no cost — so it too is advisory-only and excluded from ``J``.
+
+    ``RoadRiskLens`` is the data-driven *road-safety* display lens (Fit C, ADR-0036):
+    severity-weighted Vision Zero / KSI collision history lifted onto the substrate via
+    ``adapters.road_risk_by_node`` (synthetic fallback offline). It writes only its own
+    static ``road_risk`` overlay and reports how much the egress crush overlaps historically
+    dangerous places — read-only on the crowd fields, no lever, no cost — advisory-only,
+    excluded from ``J``.
     """
     if sc is not None:
         noise = NoiseLivabilityLens(civic_activity_by_node(sc.substrate))
         nowcast = CongestionNowcastLens(observed_counts_by_node(sc.substrate))
         mobility = MobilityDemandLens(bikeshare_demand_by_node(sc.substrate))
+        road_risk = RoadRiskLens(road_risk_by_node(sc.substrate))
     else:
         noise = NoiseLivabilityLens()
         nowcast = CongestionNowcastLens()
         mobility = MobilityDemandLens()
-    return [EmsAccessLens(), EmissionsLens(), noise, FareRevenueLens(), nowcast, mobility]
+        road_risk = RoadRiskLens()
+    return [EmsAccessLens(), EmissionsLens(), noise, FareRevenueLens(), nowcast, mobility, road_risk]

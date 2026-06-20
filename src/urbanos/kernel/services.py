@@ -121,6 +121,25 @@ def mobility_demand_overlay(lenses, n: int) -> np.ndarray:
     return peak
 
 
+def road_risk_overlay(lenses, n: int) -> np.ndarray:
+    """Per-node road-danger density for the map overlay, read off the ``RoadRiskLens`` (Fit C,
+    ADR-0036). The lens bakes a single STATIC, already-normalised ``(N,)`` danger field during
+    ``configure`` (severity-weighted KSI collision history fused onto the substrate), so this
+    just returns it — no time axis to peak over. Display-only and advisory: prices nothing, so
+    it cannot move ``J`` or any headline number. Returns all-zeros when the lens is absent or
+    inert (constructed bare / no KSI slice) — never an error."""
+    out = np.zeros(int(n), dtype=float)
+    lens = next((ln for ln in lenses if ln.name == "road_risk"), None)
+    risk = getattr(lens, "_risk", None) if lens is not None else None
+    if risk is None:
+        return out
+    a = np.asarray(risk, dtype=float)
+    if a.shape == out.shape:
+        out = np.maximum(0.0, a)
+    np.nan_to_num(out, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+    return out
+
+
 def transit_supply_overlay(substrate) -> np.ndarray:
     """Per-node transit-SUPPLY intensity (real GTFS evening scheduled departures) as a raw
     ``(N,)`` array ordered to ``substrate.ids`` — the supply map heat layer (ADR-0032), paired
@@ -190,6 +209,28 @@ def mobility_demand_report(lenses, result) -> dict:
         "available": True,
         "peak_relief": _r(max(relief), 3),
         "mean_relief": _r(sum(relief) / len(relief), 3),
+    }
+
+
+def road_risk_report(lenses, result) -> dict:
+    """Run-level RoadRisk advisory figures (Fit C, ADR-0036) off the SAME finished sim — no
+    extra run, no lever, no ``J`` contribution, so it can't move a headline number.
+
+    Reports the ``crush_road_exposure`` signal the lens emits each step (a scale-free cosine in
+    ``[0, 1]`` measuring how much the egress crush overlaps the fixed KSI danger field — i.e. how
+    much the crowd is funnelled through historically dangerous places), as its peak and mean over
+    the steps it was active. ``available: False`` when the lens is absent or never emitted (inert
+    / no slice), so the UI can say "not evaluated" rather than a misleading 0.0. No data-provenance
+    string is surfaced (real under the demo, synthetic in CI/dev), so the figure is simply marked
+    *advisory*."""
+    lens = next((ln for ln in lenses if ln.name == "road_risk"), None)
+    exposure = [float(v) for v in result.series("crush_road_exposure")]
+    if lens is None or not exposure:
+        return {"available": False, "peak_exposure": 0.0, "mean_exposure": 0.0}
+    return {
+        "available": True,
+        "peak_exposure": _r(max(exposure), 3),
+        "mean_exposure": _r(sum(exposure) / len(exposure), 3),
     }
 
 
