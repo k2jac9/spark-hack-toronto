@@ -1,0 +1,61 @@
+desc,variant,reason,provenance,metres,matched
+Admiral Rd / Bernard Ave,orig,over_tolerance,intersection_exact,21.4,ADMIRAL RD X BERNARD AVE
+Bernard Ave / Admiral Rd,swap,over_tolerance,intersection_exact,21.4,ADMIRAL RD X BERNARD AVE
+Admiral ROAD / Bernard AVENUE,long,over_tolerance,intersection_exact,21.4,ADMIRAL RD X BERNARD AVE
+Gardiner XWY / Fort York Blvd,orig,over_tolerance,intersection_exact,34.1,FORT YORK BLVD X GARDINER XWY
+Fort York Blvd / Gardiner XWY,swap,over_tolerance,intersection_exact,34.1,FORT YORK BLVD X GARDINER XWY
+Gardiner XWY / Fort York BOULEVARD,long,over_tolerance,intersection_exact,34.1,FORT YORK BLVD X GARDINER XWY
+King St E / St. James Park Trl,orig,over_tolerance,intersection_exact,95.5,KING ST E X ST JAMES PARK TRL
+St. James Park Trl / King St E,swap,over_tolerance,intersection_exact,95.5,KING ST E X ST JAMES PARK TRL
+King STREET EAST / STREET. James Park TRAIL,long,over_tolerance,intersection_exact,95.5,KING ST E X ST JAMES PARK TRL
+Trinity Crcl / Trinity Dr,orig,over_tolerance,intersection_exact,73.8,TRINITY CRCL X TRINITY DR
+Trinity Dr / Trinity Crcl,swap,over_tolerance,intersection_exact,73.8,TRINITY CRCL X TRINITY DR
+Trinity Crcl / Trinity DRIVE,long,over_tolerance,intersection_exact,73.8,TRINITY CRCL X TRINITY DR
+Trinity Dr / Trinity Bellwoods Park Trl,orig,over_tolerance,intersection_exact,37.4,TRINITY BELLWOODS PARK TRL X TRINITY DR
+Trinity Bellwoods Park Trl / Trinity Dr,swap,over_tolerance,intersection_exact,37.4,TRINITY BELLWOODS PARK TRL X TRINITY DR
+Trinity DRIVE / Trinity Bellwoods Park TRAIL,long,over_tolerance,intersection_exact,37.4,TRINITY BELLWOODS PARK TRL X TRINITY DR
+Charles St E / George Hislop Park Trl,orig,over_tolerance,intersection_exact,11.9,CHARLES ST E X GEORGE HISLOP PARK TRL
+George Hislop Park Trl / Charles St E,swap,over_tolerance,intersection_exact,11.9,CHARLES ST E X GEORGE HISLOP PARK TRL
+Charles STREET EAST / George Hislop Park TRAIL,long,over_tolerance,intersection_exact,11.9,CHARLES ST E X GEORGE HISLOP PARK TRL
+Church St / Barbara Hall Park Trl,orig,over_tolerance,intersection_exact,32.2,BARBARA HALL PARK TRL X CHURCH ST
+Barbara Hall Park Trl / Church St,swap,over_tolerance,intersection_exact,32.2,BARBARA HALL PARK TRL X CHURCH ST
+Church STREET / Barbara Hall Park TRAIL,long,over_tolerance,intersection_exact,32.2,BARBARA HALL PARK TRL X CHURCH ST
+Clarence Sq / Clarence Square Park Trl,orig,over_tolerance,intersection_exact,114.9,CLARENCE SQ X CLARENCE SQ PARK TRL
+Clarence Square Park Trl / Clarence Sq,swap,over_tolerance,intersection_exact,114.9,CLARENCE SQ X CLARENCE SQ PARK TRL
+Clarence SQUARE / Clarence Square Park TRAIL,long,over_tolerance,intersection_exact,114.9,CLARENCE SQ X CLARENCE SQ PARK TRL
+St Clair Ave W / Wychwood Ave,orig,over_tolerance,intersection_exact,22.3,ST CLAIR AVE W X WYCHWOOD AVE
+Wychwood Ave / St Clair Ave W,swap,over_tolerance,intersection_exact,22.3,ST CLAIR AVE W X WYCHWOOD AVE
+STREET Clair AVENUE WEST / Wychwood AVENUE,long,over_tolerance,intersection_exact,22.3,ST CLAIR AVE W X WYCHWOOD AVE
+Spadina Rd / Sir Winston Churchill Park Trl,orig,over_tolerance,intersection_exact,164.2,SIR WINSTON CHURCHILL PARK TRL X SPADINA RD
+Sir Winston Churchill Park Trl / Spadina Rd,swap,over_tolerance,intersection_exact,164.2,SIR WINSTON CHURCHILL PARK TRL X SPADINA RD
+Spadina ROAD / Sir Winston Churchill Park TRAIL,long,over_tolerance,intersection_exact,164.2,SIR WINSTON CHURCHILL PARK TRL X SPADINA RD
+St Clair Ave W / Walmer Rd,orig,over_tolerance,intersection_exact,14.8,ST CLAIR AVE W X WALMER RD
+Walmer Rd / St Clair Ave W,swap,over_tolerance,intersection_exact,14.8,ST CLAIR AVE W X WALMER RD
+STREET Clair AVENUE WEST / Walmer ROAD,long,over_tolerance,intersection_exact,14.8,ST CLAIR AVE W X WALMER RD
+DVP / Queen St E,orig,over_tolerance,intersection_exact,11.2,DVP X QUEEN ST E
+Queen St E / DVP,swap,over_tolerance,intersection_exact,11.2,DVP X QUEEN ST E
+DVP / Queen STREET EAST,long,over_tolerance,intersection_exact,11.2,DVP X QUEEN ST E
+C N R / C P R,orig,over_tolerance,intersection_exact,1805.0,C N R X C P R
+C P R / C N R,swap,over_tolerance,intersection_exact,1805.0,C N R X C P R
+C NORTH R / C P R,long,over_tolerance,intersection_exact,1805.0,C N R X C P R
+Bayview Ave / Bayview Multi-Use Trail,orig,over_tolerance,intersection_exact,890.8,BAYVIEW AVE X BAYVIEW MULTI-USE TRL
+Bayview Multi-Use Trail / Bayview Ave,swap,over_tolerance,intersection_exact,890.8,BAYVIEW AVE X BAYVIEW MULTI-USE TRL
+Bayview AVENUE / Bayview Multi-Use Trail,long,over_tolerance,intersection_exact,890.8,BAYVIEW AVE X BAYVIEW MULTI-USE TRL
+DVP / Lower Don River Trl,orig,over_tolerance,intersection_exact,17.3,DVP X LOWER DON RIVER TRL
+Lower Don River Trl / DVP,swap,over_tolerance,intersection_exact,17.3,DVP X LOWER DON RIVER TRL
+DVP / Lower Don River TRAIL,long,over_tolerance,intersection_exact,17.3,DVP X LOWER DON RIVER TRL
+Toronto-Hanlan's Point Ferry Route,orig,unresolved,none,,
+Toronto-Hanlan's Point Ferry Route,swap,unresolved,none,,
+Toronto-Hanlan'SOUTH Point Ferry Route,long,unresolved,none,,
+Princes' Blvd,orig,unresolved,none,,
+Princes' Blvd,swap,unresolved,none,,
+Princes' BOULEVARD,long,unresolved,none,,
+Island Park Trl,orig,unresolved,none,,
+Island Park Trl,swap,unresolved,none,,
+Island Park TRAIL,long,unresolved,none,,
+Meades Walk,orig,unresolved,none,,
+Meades Walk,swap,unresolved,none,,
+Meades Walk,long,unresolved,none,,
+Algonquin Bridge Rd,orig,unresolved,none,,
+Algonquin Bridge Rd,swap,unresolved,none,,
+Algonquin Bridge ROAD,long,unresolved,none,,
