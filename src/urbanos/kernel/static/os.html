@@ -258,6 +258,15 @@
     #flash.on { animation: flash 1.1s ease; }
     @keyframes flash { 0% { opacity: 0; } 18% { opacity: 1; } 100% { opacity: 0; } }
 
+    /* Presentation Mode toggle (ADR-0042) — top-bar pill, one control for every lens. */
+    #pres-toggle { pointer-events: auto; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700;
+      letter-spacing: .03em; white-space: nowrap; padding: 5px 12px; border-radius: var(--pill);
+      background: rgba(15,23,42,.72); border: 1px solid var(--border-2); color: var(--text-soft);
+      transition: all .18s ease; }
+    #pres-toggle:hover, #pres-toggle:focus-visible { border-color: var(--accent); color: var(--accent-text);
+      box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 35%, transparent); }
+    #pres-toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-text); background: var(--surface-sel); }
+    html[data-theme="cyber"] #pres-toggle[aria-pressed="true"] { box-shadow: 0 0 12px #00e5ff55; }
     /* Help (?) affordance — orientation, legend & provenance on demand (Depth). */
     #helpbtn { pointer-events: auto; width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
       background: rgba(15,23,42,.72); border: 1px solid var(--border-2); color: var(--text-soft);
@@ -362,6 +371,11 @@
     </div>
     <span id="scenario-tag" class="num"></span>
     <span id="status">booting…</span>
+    <!-- ADR-0042: Presentation Mode (3D skyline) is the PRESET across every lens; this is
+         the single global on/off toggle. Default ON (aria-pressed synced on boot). -->
+    <button id="pres-toggle" type="button" aria-pressed="true"
+      aria-label="Toggle Presentation Mode — 3D skyline across every lens"
+      title="Presentation Mode — 3D skyline across every lens">◣ Presentation ON</button>
     <!-- ADR-0026: "How it works" — orientation, legend & provenance on demand (Depth). -->
     <button id="helpbtn" aria-haspopup="dialog" aria-label="How UrbanOS works">?</button>
   </div>
@@ -500,7 +514,7 @@
         { id:'roads', source:'proto','source-layer':'roads', type:'line',
           paint:{ 'line-color':'#3a4a66','line-width':['interpolate',['linear'],['zoom'],10,.4,14,1.5,16,4] } },
         { id:'buildings', source:'proto','source-layer':'buildings', type:'fill', minzoom:13.5, paint:{ 'fill-color':'#212d44' } },
-        { id:'buildings-3d', source:'proto','source-layer':'buildings', type:'fill-extrusion', minzoom:13,
+        { id:'buildings-3d', source:'proto','source-layer':'buildings', type:'fill-extrusion', minzoom:12,
           layout:{ visibility:'none' },
           paint:{ 'fill-extrusion-color':'#1b2740',
             'fill-extrusion-height':['coalesce',['get','height'],12],
@@ -658,6 +672,47 @@
   function flashRoom() { const f = document.getElementById('flash');
     if (f) { f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); } }
   const _reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---- Presentation Mode (ADR-0042) ----------------------------------------
+  // The pitched 3D skyline is the PRESET across every lens (City · Risk · Flow ·
+  // Economy) and the embedded Risk view. One global toggle in the top bar; persisted;
+  // default ON. Visual only — it never touches a number, a dataset, or the offline map.
+  const PRES_PITCH = 52, PRES_BEARING = -18;
+  let PRES = localStorage.getItem('os-pres') !== 'off';   // default ON unless turned off
+  const presPitch = () => PRES ? PRES_PITCH : 0;
+  const presBearing = () => PRES ? PRES_BEARING : 0;
+  document.documentElement.classList.toggle('pres', PRES);   // CSS hook, safe pre-map
+  const presBtn = document.getElementById('pres-toggle');
+  function syncPresBtn() {
+    if (!presBtn) return;
+    presBtn.setAttribute('aria-pressed', String(PRES));
+    presBtn.textContent = PRES ? '◣ Presentation ON' : '◢ Presentation';
+  }
+  // Apply the 3D extrusion + camera tilt and mirror the state into the embedded Risk
+  // (civic) view via postMessage. `reframe:false` skips the live re-tilt when a lens
+  // swap is about to drive its own easeTo.
+  function setPres(on, reframe) {
+    PRES = !!on;
+    try { localStorage.setItem('os-pres', PRES ? 'on' : 'off'); } catch (_) {}
+    document.documentElement.classList.toggle('pres', PRES);
+    // Re-tilt BEFORE flipping layer visibility: setLayoutProperty briefly drops
+    // isStyleLoaded(), and the camera move must not depend on that. setPres only runs
+    // post-boot (button click / live message), so the map is always ready here.
+    if (reframe !== false) {
+      const cam = { pitch: presPitch(), bearing: presBearing() };
+      if (_reduceMotion()) map.jumpTo(cam); else map.easeTo({ ...cam, duration: 700 });
+    }
+    vis('buildings-3d', PRES);            // extruded skyline (no-op until layers exist)
+    vis('buildings', !PRES);              // flat footprints for the top-down view
+    const emb = document.getElementById('civ-embed');
+    if (emb && emb.contentWindow) {
+      try { emb.contentWindow.postMessage({ type: 'os-pres', on: PRES }, location.origin); } catch (_) {}
+    }
+    syncPresBtn();
+  }
+  if (presBtn) presBtn.addEventListener('click', () => setPres(!PRES, true));
+  syncPresBtn();
+
   function tweenInt(el, target) {
     const to = Number(target || 0);
     if (!el) return;
@@ -766,7 +821,7 @@
         STEADY = true;  // F-5: City shows steady-state crush, not the pre-event frame
         vis('os-edges', true); vis('os-heatmap', true); vis('os-nodes', true); vis('os-nodes-lbl', true);
         vis('civ-pins', false);
-        map.easeTo({ center:[-79.398, 43.6455], zoom:12.7, pitch:0, bearing:0, duration:700 });
+        map.easeTo({ center:[-79.398, 43.6455], zoom:PRES?13.0:12.7, pitch:presPitch(), bearing:presBearing(), duration:700 });
         const evs = (SCEN.meta.events || []);
         paint(
           '<h2 class="ptitle">One city. Every lens.</h2>'+
@@ -847,7 +902,7 @@
       enter() {
         vis('os-edges', false); vis('os-heatmap', false); vis('os-nodes', false); vis('os-nodes-lbl', false);
         vis('civ-pins', true);
-        map.easeTo({ center:[-79.384, 43.652], zoom:13.4, pitch:0, duration:700 });
+        map.easeTo({ center:[-79.384, 43.652], zoom:13.4, pitch:presPitch(), bearing:presBearing(), duration:700 });
         const rows = ADDRS.slice().sort((a,b)=>(Math.max(b.risk_safety,b.risk_activity))-(Math.max(a.risk_safety,a.risk_activity))).slice(0,40)
           .map(a => { const b = worstBand(a);
             return '<li><button type="button" data-label="'+esc(a.label)+'"><span class="dot bg-'+b+'"></span>'+
@@ -876,7 +931,9 @@
         // <body> (not #panel) so paint() can't clobber it; lazily created once.
         if (!document.getElementById('civ-embed')) {
           const f = document.createElement('iframe');
-          f.id = 'civ-embed'; f.src = '/civic/?embed=1';
+          // Carry the shell's Presentation state in so the Risk lens opens to match
+          // the global toggle (live toggles arrive later via the os-pres postMessage).
+          f.id = 'civ-embed'; f.src = '/civic/?embed=1&pres=' + (PRES ? '1' : '0');
           f.title = 'Risk lens — full civic analyst';
           document.body.appendChild(f);
         }
@@ -893,7 +950,7 @@
         refreshOS();
         vis('os-edges', true); vis('os-heatmap', true); vis('os-nodes', true); vis('os-nodes-lbl', true);
         vis('civ-pins', false);
-        map.easeTo({ center:[-79.398, 43.6455], zoom:12.7, duration:700 });
+        map.easeTo({ center:[-79.398, 43.6455], zoom:PRES?13.0:12.7, pitch:presPitch(), bearing:presBearing(), duration:700 });
         paint(
           '<h2 class="ptitle">🌊 Flow lens</h2>'+
           '<p class="psub">The FIFA convergence crunch — four venues empty at once. Scrub time; pull the levers.</p>'+
@@ -1350,10 +1407,13 @@
 
   map.on('load', async () => {
     // Boot overlay first; on Enter, rise the 3D skyline then load the canvas.
+    // Presentation Mode is the preset (ADR-0042, default ON), so we STAY pitched in the
+    // 3D view; only when the user has turned Presentation off do we settle back to flat.
     OSBoot.play({ onEnter: () => {
-      vis('buildings-3d', true);
+      vis('buildings-3d', PRES);
+      vis('buildings', !PRES);
       map.easeTo({ pitch: 52, bearing: -18, zoom: 13.0, duration: 2200 });
-      setTimeout(() => map.easeTo({ pitch: 0, bearing: 0, zoom: 12.7, duration: 1400 }), 2600);
+      if (!PRES) setTimeout(() => map.easeTo({ pitch: 0, bearing: 0, zoom: 12.7, duration: 1400 }), 2600);
     }}).then(boot);
   });
   </script>

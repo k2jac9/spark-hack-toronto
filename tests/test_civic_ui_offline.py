@@ -65,3 +65,14 @@ def test_references_vendored_offline_assets(page: str) -> None:
 )
 def test_clarity_and_a11y_present(page: str, marker: str) -> None:
     assert marker in page, f"civic map missing clarity/a11y element: {marker}"
+
+
+# ---- Presentation Mode is shell-drivable for the embedded Risk lens (ADR-0042) ----
+
+
+def test_presentation_is_shell_drivable(page: str) -> None:
+    """When embedded as the shell's Risk lens, Presentation follows the shell's single
+    global toggle: ?pres= on load and the os-pres postMessage live (same-origin guarded)."""
+    assert "PRES_PARAM" in page          # reads ?pres= from the shell
+    assert "'os-pres'" in page           # listens for the live toggle
+    assert 'id="presmode-btn"' in page   # standalone control still ships (hidden when embedded)

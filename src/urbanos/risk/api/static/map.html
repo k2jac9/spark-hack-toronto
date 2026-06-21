@@ -133,6 +133,16 @@
     .skip { position: absolute; left: -9999px; top: 0; z-index: 5; }
     .skip:focus { left: 8px; top: 8px; background: var(--surface); color: var(--text); padding: 8px 12px;
       border: 1px solid var(--accent); border-radius: var(--r); }
+    /* ---- Embedded as the shell's Risk lens (ADR-0042 follow-up) ----
+       The shell already frames this surface as "Risk" and its "How it works" repeats the
+       dataset + ▲◆●· axis explainer, so in-embed we drop the duplicated header prose, tighten
+       the section rhythm, and give the address list more room — less crowded. The markup stays
+       in the DOM (standalone /civic/ + the a11y/marker tests are untouched); we only hide it. */
+    html.embed .embed-trim { display: none; }
+    html.embed #panel h1 { font-size: 1.05rem; margin: 0 0 2px; }
+    html.embed #panel h2 { margin-top: 12px; }
+    html.embed #legend { margin-top: 6px; }
+    html.embed #addrnav { max-height: 52vh; }
     /* Responsive: below tablet width, stack the panel under the map (no clipping/scroll). */
     @media (max-width: 900px) {
       #map { position: static; width: 100%; height: 44vh; }
@@ -202,12 +212,14 @@
     <!-- Back to the unified shell; resolves to the shell at / under the /civic mount. -->
     <a href="/" class="homelink" aria-label="Back to the UrbanOS shell">‹ UrbanOS</a>
     <h1>UrbanOS — Risk lens</h1>
-    <p class="hint">Address-level civic risk · 100% on-device · pick an address or a map pin</p>
+    <!-- .embed-trim: shown standalone at /civic/, hidden when embedded as the shell's Risk
+         lens (the shell + its "How it works" already carry this framing). See html.embed CSS. -->
+    <p class="hint embed-trim">Address-level civic risk · 100% on-device · pick an address or a map pin</p>
     <ul id="legend" aria-label="Risk legend">
       <li class="b-high">▲ High</li><li class="b-medium">◆ Medium</li>
       <li class="b-low">● Low</li><li class="b-none">· OK</li>
     </ul>
-    <p class="hint" style="margin:4px 0 0">Two independent axes — <b>Safety</b> (food
+    <p class="hint embed-trim" style="margin:4px 0 0">Two independent axes — <b>Safety</b> (food
       inspections) and <b>Activity</b> (open permits). A pin is flagged if <i>either</i>
       axis is elevated.</p>
     <!-- ADR-0026 Phase 3: explicit dataset provenance + the grounding honesty note,
@@ -215,7 +227,7 @@
     <div class="provchips" aria-label="Fused City of Toronto open datasets">
       <span class="pc">DineSafe</span><span class="pc">Building permits</span><span class="pc">Business licences</span>
     </div>
-    <p class="illus">3 fused City of Toronto datasets · the local model only phrases these numbers, it cannot invent them.</p>
+    <p class="illus embed-trim">3 fused City of Toronto datasets · the local model only phrases these numbers, it cannot invent them.</p>
     <div id="status" class="hint" role="status" aria-live="polite">Loading addresses…</div>
     <h2>Hero pins</h2>
     <div class="quickrow" id="herorow" aria-label="Jump to a hero address">
@@ -245,9 +257,16 @@
     // way back; a homelink here would nest the shell in itself), and bridge keyboard
     // lens-switching to the parent (1–4 + Escape) since parent-window keys don't fire
     // while focus is inside the iframe. Same-origin → postMessage to location.origin only.
-    const EMBED = new URLSearchParams(location.search).has('embed');
+    const _params = new URLSearchParams(location.search);
+    const EMBED = _params.has('embed');
+    // ADR-0042: when embedded as the shell's Risk lens, Presentation Mode is driven by the
+    // shell's single global top-bar toggle (via ?pres= on load + os-pres postMessage live),
+    // so hide this page's own floating button to keep one control.
+    const PRES_PARAM = _params.get('pres');   // '1' | '0' | null (standalone → use saved pref)
     if (EMBED) {
+      document.documentElement.classList.add('embed');   // trims duplicated header chrome (see CSS)
       document.querySelector('.homelink')?.setAttribute('hidden', '');
+      document.getElementById('presmode-btn')?.setAttribute('hidden', '');
       addEventListener('keydown', (e) => {
         const t = e.target;
         if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
@@ -598,8 +617,15 @@
       if (on) enter3D(); else exit3D();
     }
     document.getElementById('presmode-btn').addEventListener('click', () => setPresentation(!PRES));
-    // Restore saved preference (theme applies immediately; 3D applies once the map loads).
-    try { if (localStorage.getItem('presmode') === '1') PRES = true; } catch (e) { /* private mode */ }
+    // ADR-0042: the UrbanOS shell drives Presentation for the embedded Risk lens through one
+    // global toggle. Live toggles arrive as same-origin os-pres messages (guarded).
+    addEventListener('message', (e) => {
+      if (e.origin !== location.origin || !e.data || e.data.type !== 'os-pres') return;
+      setPresentation(!!e.data.on);
+    });
+    // Initial state: the shell's ?pres= wins when embedded; otherwise the saved preference.
+    if (PRES_PARAM === '1' || PRES_PARAM === '0') { PRES = PRES_PARAM === '1'; }
+    else { try { if (localStorage.getItem('presmode') === '1') PRES = true; } catch (e) { /* private mode */ } }
     document.documentElement.setAttribute('data-theme', 'cyber');   // theme floor (ADR-0035)
     (function () {
       const btn = document.getElementById('presmode-btn');

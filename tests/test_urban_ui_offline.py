@@ -330,3 +330,25 @@ def test_shell_labels_benefit_numbers(shell: str) -> None:
     assert "benefit_definitions" in shell
     assert "cross_domain_benefit" in shell
     assert "net benefit" in shell
+
+
+# ---- 6. Presentation Mode is the preset across every lens (ADR-0042) -------
+
+
+def test_shell_has_global_presentation_toggle(shell: str) -> None:
+    """One global on/off control lives in the top bar (not a per-lens floating button)."""
+    assert 'id="pres-toggle"' in shell
+    assert "setPres(" in shell  # the shared controller is wired
+
+
+def test_shell_presentation_defaults_on(shell: str) -> None:
+    """Preset = ON: the saved flag opts OUT ('off'); anything else (incl. unset) is ON,
+    and the boot sequence stays pitched in the 3D skyline rather than flattening."""
+    assert "localStorage.getItem('os-pres') !== 'off'" in shell
+    assert "vis('buildings-3d', PRES)" in shell  # 3D skyline rides the toggle
+
+
+def test_shell_drives_embedded_risk_presentation(shell: str) -> None:
+    """The Risk lens embed inherits the state on load (?pres=) and live (os-pres msg)."""
+    assert "?embed=1&pres=" in shell
+    assert "os-pres" in shell
