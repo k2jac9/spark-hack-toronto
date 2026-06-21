@@ -117,6 +117,8 @@ demo-data:
 	PYTHONPATH=src $(PYTHON) scripts/fetch_bikeshare.py
 	PYTHONPATH=src $(PYTHON) scripts/fetch_ttc_boardings.py
 	PYTHONPATH=src $(PYTHON) scripts/fetch_gtfs_supply.py
+	PYTHONPATH=src $(PYTHON) scripts/fetch_gazetteers.py
+	PYTHONPATH=src $(PYTHON) scripts/validate_gazetteers.py
 
 # Quick deterministic check (synthetic fixtures): prints a populated report and exits.
 # 100 Queen St W → two independent indices (ADR 0014):
